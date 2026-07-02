@@ -15,6 +15,14 @@ export default [
     },
   },
   {
+    // Effects catalog — ported near-verbatim from v1; its defensive `??`
+    // fallbacks predate this repo's stricter type narrowing.
+    files: ["src/effects/**/*.ts"],
+    rules: {
+      "@typescript-eslint/no-unnecessary-condition": "off",
+    },
+  },
+  {
     // Vendored shadcn components — generated code, keep lint quiet here.
     files: ["src/components/ui/**/*.tsx", "src/components/ui/**/*.ts"],
     rules: {

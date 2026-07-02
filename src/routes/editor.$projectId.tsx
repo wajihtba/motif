@@ -8,6 +8,7 @@ import type { RendererCapabilities } from "@/engine/backend"
 import { EditorShell } from "@/components/editor/EditorShell"
 import { UnsupportedGate } from "@/components/editor/UnsupportedGate"
 import { EditorController } from "@/controller"
+import { setGlslValidator } from "@/controller/normalize"
 import { detectCapabilities } from "@/engine/backend"
 import { HtmlCanvasBackend } from "@/engine/html-canvas"
 
@@ -27,7 +28,12 @@ function EditorPage() {
     if (c.liveCanvas) {
       const b = new HtmlCanvasBackend()
       setBackend(b)
-      return () => b.dispose()
+      // Custom-GLSL layers sandbox-compile through the live GL context.
+      setGlslValidator((kind, frag) => b.validateGlsl(kind, frag))
+      return () => {
+        setGlslValidator(null)
+        b.dispose()
+      }
     }
   }, [])
 

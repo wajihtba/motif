@@ -16,11 +16,21 @@
 // drawElementImage can only paint elements owned by their own canvas, which is
 // why capture goes through the visible canvas rather than straight to scratch
 // (conformance case `foreign-canvas` tracks whether the platform ever lifts
-// this). The GL effect chain (M3) hooks between capture and composite.
+// this).
+//
+// EFFECTS (M3, GPU-resident): between a unit's scratch and its composite,
+// its GL chain runs — u_back sampled from the frame accumulated SO FAR (the
+// in-frame backdrop that kills v1's two-frame handshake). After all units:
+// canvas-wide chains, then the scene-shader chain, then canvas filters.
+// Zero getImageData anywhere in this path.
 
 import type { Box, UnitSample, UnitSampler } from "../backend"
+import type { EffectPlan, ResolvedFilterLayer } from "../effect-plan"
+import type { ChainLayer } from "../gl/pipeline"
 import type { PaintUnit } from "./paint-units"
+import { packParams } from "../../effects/core/registry"
 import { IDENTITY_SAMPLE } from "../backend"
+import { GlPipeline } from "../gl/pipeline"
 import { toDevice } from "./dpr"
 
 type DrawElementFn = (
@@ -38,6 +48,16 @@ export class Compositor {
   private units: PaintUnit[] = []
   private dpr = 1
   sampler: UnitSampler | null = null
+  /** Resolved effect stack (effect-plan.ts); set by the backend on changes. */
+  plan: EffectPlan | null = null
+  /** Pointer in normalized canvas coords (pointer-following scene shaders). */
+  pointer: [number, number] = [0.5, 0.5]
+
+  private gl: GlPipeline | null = null
+  private glFailed = false
+  // Pooled 2D scratches for backdrop regions and full-frame passes.
+  private backCanvas = document.createElement("canvas")
+  private frameCanvas = document.createElement("canvas")
 
   constructor(readonly canvas: HTMLCanvasElement) {
     // getContext can return null (jsdom in tests) — the DOM-patching half of
@@ -51,6 +71,17 @@ export class Compositor {
         : ctx.drawElement
           ? ctx.drawElement.bind(ctx)
           : null
+  }
+
+  /** Lazy shared GL pipeline (once; sticky failure). */
+  pipeline(): GlPipeline | null {
+    if (this.gl || this.glFailed) return this.gl
+    try {
+      this.gl = new GlPipeline()
+    } catch {
+      this.glFailed = true
+    }
+    return this.gl
   }
 
   get supported(): boolean {
@@ -99,7 +130,112 @@ export class Compositor {
       if (!unit.scratch || !unit.captured) continue
       const s = this.sampler?.(tSec, unit.id) ?? IDENTITY_SAMPLE
       if (s.opacity <= 0) continue
-      this.compositeUnit(unit, s)
+      this.compositeUnit(unit, s, tSec)
+    }
+
+    // --- effect post passes ---------------------------------------------------
+    this.applyCanvasChain(tSec)
+    this.applySceneChain(tSec)
+    this.applyCanvasFilters(tSec)
+  }
+
+  /** element-shader/pixel layers addressed at the whole canvas. */
+  private applyCanvasChain(tSec: number): void {
+    const layers = this.plan?.canvasChain
+    if (!layers?.length) return
+    const gl = this.pipeline()
+    if (!gl) return
+    const { ctx } = this
+    const W = this.canvas.width
+    const H = this.canvas.height
+    // Snapshot the frame (canvas can't be both texture source and drawTarget).
+    sizeCanvas(this.frameCanvas, W, H)
+    const fctx = this.frameCanvas.getContext("2d")!
+    fctx.clearRect(0, 0, W, H)
+    fctx.drawImage(this.canvas, 0, 0)
+    const out = gl.runChain(
+      this.frameCanvas,
+      null,
+      layers.map((l) => this.chainLayer(l, tSec)),
+      W,
+      H
+    )
+    if (!out) return
+    ctx.setTransform(1, 0, 0, 1, 0, 0)
+    ctx.clearRect(0, 0, W, H)
+    ctx.drawImage(out, 0, 0)
+  }
+
+  /** Full-frame scene shaders, ping-ponged in stack order. */
+  private applySceneChain(tSec: number): void {
+    const layers = this.plan?.scene
+    if (!layers?.length) return
+    const gl = this.pipeline()
+    if (!gl) return
+    const { ctx } = this
+    const W = this.canvas.width
+    const H = this.canvas.height
+    sizeCanvas(this.frameCanvas, W, H)
+    const fctx = this.frameCanvas.getContext("2d")!
+    fctx.clearRect(0, 0, W, H)
+    fctx.drawImage(this.canvas, 0, 0)
+    const out = gl.runSceneChain(
+      this.frameCanvas,
+      layers.map((l) => ({
+        def: l.def,
+        time: l.layer.animate ? tSec : 0,
+        pointer: this.pointer,
+      })),
+      W,
+      H
+    )
+    if (!out) return
+    ctx.setTransform(1, 0, 0, 1, 0, 0)
+    ctx.clearRect(0, 0, W, H)
+    ctx.drawImage(out, 0, 0)
+  }
+
+  /** ctx.filter grade over the whole frame (drawImage only — GPU path). */
+  private applyCanvasFilters(tSec: number): void {
+    const layers = this.plan?.canvasFilters
+    if (!layers?.length) return
+    const { ctx } = this
+    const W = this.canvas.width
+    const H = this.canvas.height
+    sizeCanvas(this.frameCanvas, W, H)
+    const fctx = this.frameCanvas.getContext("2d")!
+    fctx.clearRect(0, 0, W, H)
+    fctx.drawImage(this.canvas, 0, 0)
+    ctx.save()
+    ctx.setTransform(1, 0, 0, 1, 0, 0)
+    ctx.filter = this.filterCss(layers, tSec)
+    ctx.clearRect(0, 0, W, H)
+    ctx.drawImage(this.frameCanvas, 0, 0)
+    ctx.restore()
+  }
+
+  private filterCss(layers: ResolvedFilterLayer[], tSec: number): string {
+    return (
+      layers
+        .map((l) => l.def.css(l.layer.animate ? tSec : 0, l.layer.params))
+        .filter(Boolean)
+        .join(" ") || "none"
+    )
+  }
+
+  private chainLayer(
+    l: { def: ChainLayer["def"]; layer: import("../../scene/types").EffectLayer },
+    tSec: number
+  ): ChainLayer {
+    return {
+      def: l.def,
+      params: new Float32Array(packParams(l.def, l.layer.params)),
+      time: l.layer.animate ? tSec : 0,
+      masked: l.layer.scope !== "box",
+      frag:
+        l.def.id === "custom" && typeof l.layer.frag === "string"
+          ? l.layer.frag
+          : undefined,
     }
   }
 
@@ -121,18 +257,46 @@ export class Compositor {
     unit.captured = true
   }
 
-  /** drawImage the unit's scratch with transform/opacity about its center. */
-  private compositeUnit(unit: PaintUnit, s: UnitSample): void {
+  /** drawImage the unit's pixels (through its GL chain when it has one) with
+   *  transform/opacity about its center. */
+  private compositeUnit(unit: PaintUnit, s: UnitSample, tSec: number): void {
     const { ctx, dpr } = this
     const scratch = unit.scratch!
+    const dw = scratch.width
+    const dh = scratch.height
+
+    let source: CanvasImageSource = scratch
+    const fx = this.plan?.perUnit.get(unit.id)
+    if (fx?.chain.length) {
+      const gl = this.pipeline()
+      if (gl) {
+        // In-frame backdrop: the frame accumulated SO FAR under the unit box.
+        const bx = toDevice(unit.box.x, dpr)
+        const by = toDevice(unit.box.y, dpr)
+        sizeCanvas(this.backCanvas, dw, dh)
+        const bctx = this.backCanvas.getContext("2d")!
+        bctx.clearRect(0, 0, dw, dh)
+        bctx.drawImage(this.canvas, bx, by, dw, dh, 0, 0, dw, dh)
+        const out = gl.runChain(
+          scratch,
+          this.backCanvas,
+          fx.chain.map((l) => this.chainLayer(l, tSec)),
+          dw,
+          dh
+        )
+        if (out) source = out
+      }
+    }
+
     const cx = toDevice(unit.box.x + unit.box.w / 2 + s.x, dpr)
     const cy = toDevice(unit.box.y + unit.box.h / 2 + s.y, dpr)
     ctx.save()
     ctx.globalAlpha = Math.min(1, Math.max(0, s.opacity))
+    if (fx?.filters.length) ctx.filter = this.filterCss(fx.filters, tSec)
     ctx.translate(cx, cy)
     if (s.rotate) ctx.rotate((s.rotate * Math.PI) / 180)
     if (s.scale !== 1) ctx.scale(s.scale, s.scale)
-    ctx.drawImage(scratch, -scratch.width / 2, -scratch.height / 2)
+    ctx.drawImage(source, -dw / 2, -dh / 2)
     ctx.restore()
   }
 
@@ -149,3 +313,4 @@ function sizeCanvas(c: HTMLCanvasElement, w: number, h: number): void {
     c.height = h
   }
 }
+

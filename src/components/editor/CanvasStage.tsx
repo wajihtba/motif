@@ -59,6 +59,17 @@ export function CanvasStage({
     const ro = new ResizeObserver(() => viewport.handleResize())
     ro.observe(vpEl)
 
+    // Pointer-following scene shaders (spotlight etc.) read this.
+    const onPointerMove = (e: PointerEvent) => {
+      const r = backend.stage.getBoundingClientRect()
+      if (!r.width || !r.height) return
+      backend.setPointer(
+        (e.clientX - r.left) / r.width,
+        (e.clientY - r.top) / r.height
+      )
+    }
+    vpEl.addEventListener("pointermove", onPointerMove)
+
     onViewport({
       get zoom() {
         return viewport.zoom
@@ -70,6 +81,7 @@ export function CanvasStage({
 
     return () => {
       ro.disconnect()
+      vpEl.removeEventListener("pointermove", onPointerMove)
       interaction.dispose()
       viewport.dispose()
       ctrl.detachBackend()

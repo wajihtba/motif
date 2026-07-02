@@ -27,6 +27,12 @@ import {
   sanitizeImageSrc,
   sanitizeStylesheet,
 } from "../scene/validate"
+import {
+  findEffect,
+  paramDefaults,
+  supportsOf,
+} from "../effects/core/registry"
+import "../effects" // register the catalogues before any normalize call
 import { CommandAbort } from "./types"
 
 export type Warn = (msg: string) => void
@@ -180,7 +186,21 @@ function safeTag(tag: string | undefined, warn: Warn): string | undefined {
   return "div"
 }
 
-// --- layers & tracks (shape-level until the registries land in M3/M4) ---------
+// --- effect layers (registry-aware: clamp → coerce → sanitize) ----------------
+
+/** GLSL sandbox-compile hook — the renderer backend provides it when a GL
+ *  context exists (headless/server contexts skip the check). A compile
+ *  failure returns the shader info log so the agent can fix its GLSL in the
+ *  same turn (docs/plan/03-agent-first.md §5). */
+export type GlslValidator = (
+  kind: "element" | "scene",
+  frag: string
+) => string | null
+
+let glslValidator: GlslValidator | null = null
+export function setGlslValidator(fn: GlslValidator | null): void {
+  glslValidator = fn
+}
 
 export function normalizeLayer(
   raw: Partial<EffectLayer>,
@@ -191,16 +211,75 @@ export function normalizeLayer(
     warn("dropped effect layer without an effect id")
     return null
   }
+  const found = findEffect(raw.effect, raw.kind)
+  if (!found || found.kind === "anim") {
+    warn(`unknown effect "${raw.effect}"`)
+    return null
+  }
+  const { def } = found
+  const kind = found.kind as EffectLayer["kind"]
+  const supports = supportsOf(def)
+
+  // Params: registry defaults, provided values clamped to declared ranges.
+  const params = paramDefaults(def)
+  if (raw.params && typeof raw.params === "object") {
+    for (const p of def.params) {
+      const v = raw.params[p.key]
+      if (typeof v !== "number" || !Number.isFinite(v)) continue
+      const clamped = Math.max(p.min, Math.min(p.max, v))
+      if (clamped !== v) warn(`clamped ${def.id}.${p.key} ${v} → ${clamped}`)
+      params[p.key] = clamped
+    }
+  }
+
+  // Target/scope: coerce to what the effect supports.
+  let target = normalizeTarget(raw.target, fallbackTarget)
+  if (target.type !== "canvas" && !supports.targets.includes("element")) {
+    warn(`"${def.id}" is canvas-only — retargeted to the whole canvas`)
+    target = { type: "canvas" }
+  }
+  if (target.type === "canvas" && !supports.targets.includes("canvas")) {
+    if (fallbackTarget.type !== "canvas") {
+      target = fallbackTarget
+    } else {
+      warn(`"${def.id}" needs an element target (select something first)`)
+      return null
+    }
+  }
+  const scope =
+    raw.scope && supports.scopes.includes(raw.scope)
+      ? raw.scope
+      : (supports.scopes[0] ?? "box")
+
+  // Custom GLSL escape hatch: sandbox-compile BEFORE it enters the document.
+  let frag: string | undefined
+  if (def.id === "custom") {
+    if (typeof raw.frag !== "string" || !raw.frag.trim()) {
+      throw new CommandAbort(
+        'the "custom" effect requires a GLSL frag body: vec4 fx(){ … }'
+      )
+    }
+    const log = glslValidator?.("element", raw.frag)
+    if (log) {
+      throw new CommandAbort(
+        `GLSL failed to compile — fix and retry. Compiler log:\n${log}`
+      )
+    }
+    frag = raw.frag
+  }
+
   return {
     id: typeof raw.id === "string" ? raw.id : uid("fx"),
-    effect: raw.effect,
-    kind: raw.kind ?? "element-shader",
-    params: numericRecord(raw.params),
-    animate: raw.animate === true,
+    effect: def.id,
+    kind,
+    params,
+    animate: supports.animatable
+      ? raw.animate !== false && def.animated
+      : false,
     enabled: raw.enabled !== false,
-    target: normalizeTarget(raw.target, fallbackTarget),
-    scope: raw.scope ?? "box",
-    frag: typeof raw.frag === "string" ? raw.frag : undefined,
+    target,
+    scope,
+    frag,
     owner: typeof raw.owner === "string" ? raw.owner : undefined,
   }
 }

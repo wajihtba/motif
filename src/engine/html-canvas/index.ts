@@ -21,6 +21,7 @@ import type {
 import type { CompiledUnits } from "./paint-units"
 import { walk } from "../../scene/model"
 import { detectCapabilities } from "../backend"
+import { planEffects } from "../effect-plan"
 import { buildNodeEl, imageTracker } from "./build"
 import { Compositor } from "./compositor"
 import { classifyPatches, nodeForId, restyleEl } from "./dom-patch"
@@ -28,6 +29,10 @@ import { currentDpr, sizeSceneCanvas } from "./dpr"
 import { FrameLoop } from "./loop"
 import { MeasurementHost } from "./measure"
 import { compileUnits, pinUnitEl, unitRootIds } from "./paint-units"
+
+/** Frame-budget watchdog config (docs/plan/03-agent-first.md §5): two
+ *  consecutive frames over budget auto-disable custom-GLSL layers. */
+const FRAME_BUDGET_MS = 50
 
 export class HtmlCanvasBackend implements RendererBackend {
   readonly capabilities: RendererCapabilities
@@ -43,6 +48,11 @@ export class HtmlCanvasBackend implements RendererBackend {
   private dpr = 1
   private pendingT = 0
   private disposed = false
+  private externalContinuous = false
+  private overruns = 0
+  /** Fired when the frame budget is blown twice with custom GLSL present —
+   *  the UI disables those layers and tells the agent/user. */
+  onBudgetOverrun: ((layerIds: string[]) => void) | null = null
 
   constructor() {
     this.capabilities = detectCapabilities()
@@ -62,7 +72,10 @@ export class HtmlCanvasBackend implements RendererBackend {
     })
     if ("onpaint" in this.canvas) {
       this.canvas.onpaint = () => {
-        if (!this.disposed) this.compositor.compose(this.pendingT)
+        if (this.disposed) return
+        const started = performance.now()
+        this.compositor.compose(this.pendingT)
+        this.watchBudget(performance.now() - started)
       }
     }
     // Font swaps change metrics: re-measure once the font set settles.
@@ -97,7 +110,50 @@ export class HtmlCanvasBackend implements RendererBackend {
       this.compiled.units,
       this.dpr
     )
+    this.replan()
     this.loop.domMutated()
+  }
+
+  /** Recompute the effect plan + whether the loop must run continuously. */
+  private replan(): void {
+    if (!this.scene) return
+    this.compositor.plan = planEffects(this.scene)
+    this.updateContinuous()
+  }
+
+  private updateContinuous(): void {
+    this.loop.setContinuous(
+      this.externalContinuous || Boolean(this.compositor.plan?.animated)
+    )
+  }
+
+  /** Frame-budget watchdog: two consecutive over-budget frames disable the
+   *  custom-GLSL layers (the usual culprits) via onBudgetOverrun. */
+  private watchBudget(ms: number): void {
+    if (ms <= FRAME_BUDGET_MS) {
+      this.overruns = 0
+      return
+    }
+    this.overruns += 1
+    if (this.overruns < 2 || !this.scene) return
+    this.overruns = 0
+    const customIds = this.scene.effects
+      .filter((l) => l.enabled && l.effect === "custom")
+      .map((l) => l.id)
+    if (customIds.length) this.onBudgetOverrun?.(customIds)
+  }
+
+  /** Sandbox-compile agent GLSL (wired into the normalize gate by the app). */
+  validateGlsl(kind: "element" | "scene", frag: string): string | null {
+    return this.compositor.pipeline()?.compileCheck(kind, frag) ?? null
+  }
+
+  /** Pointer in normalized canvas coords (pointer-following scene shaders). */
+  setPointer(nx: number, ny: number): void {
+    this.compositor.pointer = [nx, ny]
+    if (this.compositor.plan?.scene.some((s) => s.def.pointer)) {
+      this.loop.invalidate()
+    }
   }
 
   /** Incremental update after a dispatch transaction — the operation ladder
@@ -150,6 +206,7 @@ export class HtmlCanvasBackend implements RendererBackend {
       this.compositor.markUnitsStale()
       this.loop.domMutated()
     }
+    if (targets.stack || mutated) this.replan()
   }
 
   /** Ids of the currently extracted (isolated) units. */
@@ -253,6 +310,7 @@ export class HtmlCanvasBackend implements RendererBackend {
       this.compiled.units,
       this.dpr
     )
+    this.replan()
     this.loop.domMutated()
   }
 
@@ -262,7 +320,8 @@ export class HtmlCanvasBackend implements RendererBackend {
   }
 
   setContinuous(on: boolean): void {
-    this.loop.setContinuous(on)
+    this.externalContinuous = on
+    this.updateContinuous()
   }
 
   invalidate(): void {

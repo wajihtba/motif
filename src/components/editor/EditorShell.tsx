@@ -2,7 +2,7 @@
 // The chat rail is the primary panel — the agent and the direct-manipulation
 // surface edit the same document through the same command seam.
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import type { EditorController } from "@/controller"
 import type { HtmlCanvasBackend } from "@/engine/html-canvas"
 import type { TopBarViewport } from "./TopBar"
@@ -32,6 +32,27 @@ export function EditorShell({
       }),
     [ctrl, chat]
   )
+
+  // GPU watchdog: two over-budget frames disable custom-GLSL layers and put
+  // the reason in the transcript, where the agent will see it next turn.
+  useEffect(() => {
+    backend.onBudgetOverrun = (layerIds) => {
+      ctrl.dispatch(
+        layerIds.map((id) => ({
+          command: "fx.update",
+          args: { id, patch: { enabled: false } },
+        })),
+        { source: "system", label: "GPU watchdog" }
+      )
+      chat.addText(
+        "assistant",
+        `Disabled ${layerIds.length} custom shader${layerIds.length === 1 ? "" : "s"} — the frame budget was exceeded twice.`
+      )
+    }
+    return () => {
+      backend.onBudgetOverrun = null
+    }
+  }, [backend, ctrl, chat])
 
   return (
     <div className="flex h-svh flex-col overflow-hidden bg-background text-sm">

@@ -4,6 +4,7 @@ import type { EditorController } from "@/controller"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { DesignPanel } from "./DesignPanel"
+import { EffectsPanel } from "./EffectsPanel"
 
 export function InspectorTabs({ ctrl }: { ctrl: EditorController }) {
   return (
@@ -11,9 +12,7 @@ export function InspectorTabs({ ctrl }: { ctrl: EditorController }) {
       <Tabs defaultValue="design" className="flex min-h-0 flex-1 flex-col">
         <TabsList className="mx-3 mt-2 grid grid-cols-3">
           <TabsTrigger value="design">Design</TabsTrigger>
-          <TabsTrigger value="effects" disabled title="Arrives with M3">
-            Effects
-          </TabsTrigger>
+          <TabsTrigger value="effects">Effects</TabsTrigger>
           <TabsTrigger value="animate" disabled title="Arrives with M4">
             Animate
           </TabsTrigger>
@@ -21,6 +20,11 @@ export function InspectorTabs({ ctrl }: { ctrl: EditorController }) {
         <TabsContent value="design" className="min-h-0 flex-1">
           <ScrollArea className="h-full">
             <DesignPanel ctrl={ctrl} />
+          </ScrollArea>
+        </TabsContent>
+        <TabsContent value="effects" className="min-h-0 flex-1">
+          <ScrollArea className="h-full">
+            <EffectsPanel ctrl={ctrl} />
           </ScrollArea>
         </TabsContent>
       </Tabs>
