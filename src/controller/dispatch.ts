@@ -7,6 +7,7 @@
 // and unresolvable ids abort the WHOLE batch (nothing applies). The agent's
 // motif_edit tool call and a UI slider drag arrive here identically.
 
+import type { Patch } from "immer"
 import type { DocumentStore } from "./store"
 import type { History, HistoryEntry } from "./history"
 import type { AnyCommandDef, CommandSource, Invalidation } from "./types"
@@ -38,11 +39,48 @@ export interface DispatchResult {
   entry: HistoryEntry | null
 }
 
+interface Gesture {
+  label: string
+  source: CommandSource
+  commandIds: string[]
+  patches: Patch[]
+  inversePatches: Patch[]
+}
+
 export class Dispatcher {
+  private gesture: Gesture | null = null
+
   constructor(
     private store: DocumentStore,
     private history: History
   ) {}
+
+  /** Begin coalescing: every dispatch until endGesture() accumulates into ONE
+   *  history entry (a drag is one undo step, not sixty). */
+  beginGesture(label: string, source: CommandSource = "user"): void {
+    this.endGesture()
+    this.gesture = {
+      label,
+      source,
+      commandIds: [],
+      patches: [],
+      inversePatches: [],
+    }
+  }
+
+  endGesture(): HistoryEntry | null {
+    const g = this.gesture
+    this.gesture = null
+    if (!g || !g.patches.length) return null
+    return this.history.push({
+      label: g.label,
+      source: g.source,
+      commandIds: [...new Set(g.commandIds)],
+      patches: g.patches,
+      // inverse patches must unwind in reverse application order
+      inversePatches: [...g.inversePatches].reverse(),
+    })
+  }
 
   dispatch(
     calls: CommandCall[] | CommandCall,
@@ -86,15 +124,20 @@ export class Dispatcher {
 
       // Selection-only changes are not undoable steps.
       const touchesDocument = patches.some((p) => p.path[0] === "document")
-      const entry = touchesDocument
-        ? this.history.push({
-            label: opts.label ?? defaultLabel(resolved.map((r) => r.def)),
-            source,
-            commandIds: resolved.map((r) => r.def.id),
-            patches,
-            inversePatches,
-          })
-        : null
+      let entry: HistoryEntry | null = null
+      if (touchesDocument && this.gesture) {
+        this.gesture.commandIds.push(...resolved.map((r) => r.def.id))
+        this.gesture.patches.push(...patches)
+        this.gesture.inversePatches.push(...inversePatches)
+      } else if (touchesDocument) {
+        entry = this.history.push({
+          label: opts.label ?? defaultLabel(resolved.map((r) => r.def)),
+          source,
+          commandIds: resolved.map((r) => r.def.id),
+          patches,
+          inversePatches,
+        })
+      }
 
       return {
         ok: true,

@@ -69,4 +69,13 @@ export class DocumentStore {
     this.current = { document, selection: [] }
     this.emit()
   }
+
+  /** Wake subscribers for derived facts that live outside the state object
+   *  (history depth after endGesture). The shallow clone changes snapshot
+   *  identity so useSyncExternalStore doesn't bail; document/selection
+   *  references stay stable for memoized children. */
+  notify(): void {
+    this.current = { ...this.current }
+    this.emit()
+  }
 }

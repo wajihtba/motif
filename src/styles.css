@@ -132,3 +132,11 @@
     @apply font-sans;
   }
 }
+
+/* The canvas well — one step darker than panels, subtle dot grid, so the
+   user's (usually bright) artboard pops. */
+.canvas-well {
+  background-color: oklch(0.12 0.004 106);
+  background-image: radial-gradient(oklch(1 0 0 / 5%) 1px, transparent 1px);
+  background-size: 24px 24px;
+}

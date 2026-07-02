@@ -15,7 +15,7 @@ export const Route = createRootRoute({
         content: "width=device-width, initial-scale=1",
       },
       {
-        title: "TanStack Start Starter",
+        title: "Motif",
       },
     ],
     links: [
@@ -36,7 +36,9 @@ export const Route = createRootRoute({
 
 function RootDocument({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    // Dark studio by default — Motif is a tool; the user's artwork is the
+    // bright thing on screen.
+    <html lang="en" className="dark">
       <head>
         <HeadContent />
       </head>

@@ -40,6 +40,27 @@ export class EditorController {
     return result
   }
 
+  /** Coalesce every dispatch until endGesture() into one undo step (drags,
+   *  slider scrubs). The engine still updates live per dispatch. */
+  beginGesture(label: string): void {
+    this.dispatcher.beginGesture(label)
+  }
+
+  endGesture(): HistoryEntry | null {
+    const entry = this.dispatcher.endGesture()
+    // canUndo lives outside the state object — wake subscribers explicitly.
+    if (entry) this.store.notify()
+    return entry
+  }
+
+  /** Convenience for UI selection (routes through element.select). */
+  select(ids: string[] | string | null): void {
+    this.dispatch(
+      { command: "element.select", args: { ids } },
+      { source: "user" }
+    )
+  }
+
   undo(): HistoryEntry | null {
     const entry = this.history.undo()
     if (entry) {
