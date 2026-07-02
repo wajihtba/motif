@@ -57,6 +57,16 @@ export class History {
     return entry
   }
 
+  /** Entries newer than `seq` — how the agent learns what the human changed
+   *  since its last turn (docs/plan/03-agent-first.md diff results). */
+  since(seq: number): HistoryEntry[] {
+    return this.past.filter((e) => e.seq > seq)
+  }
+
+  get lastSeq(): number {
+    return this.seq
+  }
+
   clear(): void {
     this.past = []
     this.future = []
