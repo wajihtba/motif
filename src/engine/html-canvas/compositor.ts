@@ -24,6 +24,7 @@
 // canvas-wide chains, then the scene-shader chain, then canvas filters.
 // Zero getImageData anywhere in this path.
 
+import type { EffectLayer } from "../../scene/types"
 import type { Box, UnitSample, UnitSampler } from "../backend"
 import type { EffectPlan, ResolvedFilterLayer } from "../effect-plan"
 import type { ChainLayer } from "../gl/pipeline"
@@ -224,7 +225,10 @@ export class Compositor {
   }
 
   private chainLayer(
-    l: { def: ChainLayer["def"]; layer: import("../../scene/types").EffectLayer },
+    l: {
+      def: ChainLayer["def"]
+      layer: EffectLayer
+    },
     tSec: number
   ): ChainLayer {
     return {
@@ -313,4 +317,3 @@ function sizeCanvas(c: HTMLCanvasElement, w: number, h: number): void {
     c.height = h
   }
 }
-

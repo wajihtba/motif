@@ -80,7 +80,10 @@ describe("fx commands", () => {
 
   it("custom GLSL: missing frag aborts; validator log round-trips", () => {
     const ctrl = withHero()
-    const missing = ctrl.dispatch({ command: "fx.add", args: { effect: "custom" } })
+    const missing = ctrl.dispatch({
+      command: "fx.add",
+      args: { effect: "custom" },
+    })
     expect(missing.ok).toBe(false)
     expect(missing.errors[0]).toMatch(/requires a GLSL frag/)
 
@@ -96,10 +99,15 @@ describe("fx commands", () => {
 
     const good = ctrl.dispatch({
       command: "fx.add",
-      args: { effect: "custom", frag: "vec4 fx(){ return texture2D(u_tex, v_uv); }" },
+      args: {
+        effect: "custom",
+        frag: "vec4 fx(){ return texture2D(u_tex, v_uv); }",
+      },
     })
     expect(good.ok).toBe(true)
-    expect(ctrl.store.state.document.scene.effects[0].frag).toContain("texture2D")
+    expect(ctrl.store.state.document.scene.effects[0].frag).toContain(
+      "texture2D"
+    )
   })
 
   it("update merges params through the gate; reorder and remove work", () => {

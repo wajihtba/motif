@@ -15,9 +15,9 @@ import type {
   ElementShaderDef,
   PixelDef,
   SceneShaderDef,
-} from '../../effects/core/types'
-import { EL_PRELUDE, EL_TAIL } from '../../effects/element-shaders/prelude'
-import { SCENE_HEAD } from '../../effects/scene-shaders/prelude'
+} from "../../effects/core/types"
+import { EL_PRELUDE, EL_TAIL } from "../../effects/element-shaders/prelude"
+import { SCENE_HEAD } from "../../effects/scene-shaders/prelude"
 
 const VERT = `
 attribute vec2 a_pos;
@@ -67,7 +67,7 @@ export interface SceneLayer {
 }
 
 export class GlPipeline {
-  readonly canvas = document.createElement('canvas')
+  readonly canvas = document.createElement("canvas")
   private gl: WebGL2RenderingContext
   private programs = new Map<string, ProgramInfo>()
   private texSrc!: WebGLTexture
@@ -76,16 +76,16 @@ export class GlPipeline {
   private targets: [Target | null, Target | null] = [null, null]
 
   constructor() {
-    const gl = this.canvas.getContext('webgl2', {
+    const gl = this.canvas.getContext("webgl2", {
       premultipliedAlpha: false,
       alpha: true,
       antialias: false,
       depth: false,
     })
-    if (!gl) throw new Error('WebGL2 unavailable')
+    if (!gl) throw new Error("WebGL2 unavailable")
     this.gl = gl
-    this.canvas.addEventListener('webglcontextlost', (e) => e.preventDefault())
-    this.canvas.addEventListener('webglcontextrestored', () => this.initGL())
+    this.canvas.addEventListener("webglcontextlost", (e) => e.preventDefault())
+    this.canvas.addEventListener("webglcontextrestored", () => this.initGL())
     this.initGL()
   }
 
@@ -102,7 +102,7 @@ export class GlPipeline {
 
   private makeTex(): WebGLTexture {
     const gl = this.gl
-    const tex = gl.createTexture()!
+    const tex = gl.createTexture()
     gl.bindTexture(gl.TEXTURE_2D, tex)
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
@@ -121,10 +121,26 @@ export class GlPipeline {
     }
     const tex = this.makeTex()
     gl.bindTexture(gl.TEXTURE_2D, tex)
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null)
-    const fbo = gl.createFramebuffer()!
+    gl.texImage2D(
+      gl.TEXTURE_2D,
+      0,
+      gl.RGBA,
+      w,
+      h,
+      0,
+      gl.RGBA,
+      gl.UNSIGNED_BYTE,
+      null
+    )
+    const fbo = gl.createFramebuffer()
     gl.bindFramebuffer(gl.FRAMEBUFFER, fbo)
-    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0)
+    gl.framebufferTexture2D(
+      gl.FRAMEBUFFER,
+      gl.COLOR_ATTACHMENT0,
+      gl.TEXTURE_2D,
+      tex,
+      0
+    )
     gl.bindFramebuffer(gl.FRAMEBUFFER, null)
     t = { fbo, tex, w, h }
     this.targets[i] = t
@@ -138,15 +154,15 @@ export class GlPipeline {
     const program = link(gl, VERT, fragSource)
     info = {
       program,
-      aPos: gl.getAttribLocation(program, 'a_pos'),
-      uFlip: gl.getUniformLocation(program, 'u_flip'),
-      uTex: gl.getUniformLocation(program, 'u_tex'),
-      uBack: gl.getUniformLocation(program, 'u_back'),
-      uRes: gl.getUniformLocation(program, 'u_res'),
-      uTime: gl.getUniformLocation(program, 'u_time'),
-      uP: gl.getUniformLocation(program, 'u_p[0]'),
-      uMask: gl.getUniformLocation(program, 'u_mask'),
-      uPointer: gl.getUniformLocation(program, 'u_pointer'),
+      aPos: gl.getAttribLocation(program, "a_pos"),
+      uFlip: gl.getUniformLocation(program, "u_flip"),
+      uTex: gl.getUniformLocation(program, "u_tex"),
+      uBack: gl.getUniformLocation(program, "u_back"),
+      uRes: gl.getUniformLocation(program, "u_res"),
+      uTime: gl.getUniformLocation(program, "u_time"),
+      uP: gl.getUniformLocation(program, "u_p[0]"),
+      uMask: gl.getUniformLocation(program, "u_mask"),
+      uPointer: gl.getUniformLocation(program, "u_pointer"),
     }
     this.programs.set(key, info)
     return info
@@ -155,17 +171,17 @@ export class GlPipeline {
   /** Sandbox-compile a GLSL body (the normalize gate's escape-hatch check).
    *  Returns null when it compiles; the shader info log otherwise — returned
    *  to the agent so it can fix its GLSL in the same turn. */
-  compileCheck(kind: 'element' | 'scene', fragBody: string): string | null {
+  compileCheck(kind: "element" | "scene", fragBody: string): string | null {
     const gl = this.gl
     const src =
-      kind === 'element'
+      kind === "element"
         ? EL_PRELUDE + fragBody + EL_TAIL
-        : SCENE_HEAD + '\n' + fragBody
+        : SCENE_HEAD + "\n" + fragBody
     const sh = gl.createShader(gl.FRAGMENT_SHADER)!
     gl.shaderSource(sh, src)
     gl.compileShader(sh)
     const ok = gl.getShaderParameter(sh, gl.COMPILE_STATUS) as boolean
-    const log = ok ? null : gl.getShaderInfoLog(sh) || 'compile failed'
+    const log = ok ? null : gl.getShaderInfoLog(sh) || "compile failed"
     gl.deleteShader(sh)
     return log
   }
@@ -192,7 +208,17 @@ export class GlPipeline {
     if (back) {
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, back)
     } else {
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4))
+      gl.texImage2D(
+        gl.TEXTURE_2D,
+        0,
+        gl.RGBA,
+        1,
+        1,
+        0,
+        gl.RGBA,
+        gl.UNSIGNED_BYTE,
+        new Uint8Array(4)
+      )
     }
     gl.activeTexture(gl.TEXTURE0)
     gl.bindTexture(gl.TEXTURE_2D, this.texSrc)
@@ -207,7 +233,10 @@ export class GlPipeline {
         : `el:${layer.def.id}`
       let p: ProgramInfo
       try {
-        p = this.program(key, EL_PRELUDE + (layer.frag ?? layer.def.frag) + EL_TAIL)
+        p = this.program(
+          key,
+          EL_PRELUDE + (layer.frag ?? layer.def.frag) + EL_TAIL
+        )
       } catch {
         continue // bad custom shader — skip the layer, keep the frame alive
       }
@@ -261,7 +290,10 @@ export class GlPipeline {
       const last = i === layers.length - 1
       let p: ProgramInfo
       try {
-        p = this.program(`scene:${layer.def.id}`, SCENE_HEAD + '\n' + layer.def.frag)
+        p = this.program(
+          `scene:${layer.def.id}`,
+          SCENE_HEAD + "\n" + layer.def.frag
+        )
       } catch {
         continue
       }
@@ -279,7 +311,8 @@ export class GlPipeline {
       if (p.uFlip) gl.uniform1f(p.uFlip, last ? 1 : 0)
       if (p.uRes) gl.uniform2f(p.uRes, w, h)
       if (p.uTime) gl.uniform1f(p.uTime, layer.time)
-      if (p.uPointer) gl.uniform2f(p.uPointer, layer.pointer[0], layer.pointer[1])
+      if (p.uPointer)
+        gl.uniform2f(p.uPointer, layer.pointer[0], layer.pointer[1])
 
       gl.drawArrays(gl.TRIANGLES, 0, 3)
       if (target) sourceTex = target.tex
@@ -296,27 +329,35 @@ export class GlPipeline {
   }
 }
 
-function compile(gl: WebGL2RenderingContext, type: number, src: string): WebGLShader {
+function compile(
+  gl: WebGL2RenderingContext,
+  type: number,
+  src: string
+): WebGLShader {
   const sh = gl.createShader(type)!
   gl.shaderSource(sh, src)
   gl.compileShader(sh)
   if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) {
     const log = gl.getShaderInfoLog(sh)
     gl.deleteShader(sh)
-    throw new Error('compile failed: ' + log)
+    throw new Error("compile failed: " + log)
   }
   return sh
 }
 
-function link(gl: WebGL2RenderingContext, vsrc: string, fsrc: string): WebGLProgram {
+function link(
+  gl: WebGL2RenderingContext,
+  vsrc: string,
+  fsrc: string
+): WebGLProgram {
   const vs = compile(gl, gl.VERTEX_SHADER, vsrc)
   const fs = compile(gl, gl.FRAGMENT_SHADER, fsrc)
-  const prog = gl.createProgram()!
+  const prog = gl.createProgram()
   gl.attachShader(prog, vs)
   gl.attachShader(prog, fs)
   gl.linkProgram(prog)
   if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
-    throw new Error('link failed: ' + gl.getProgramInfoLog(prog))
+    throw new Error("link failed: " + gl.getProgramInfoLog(prog))
   }
   return prog
 }

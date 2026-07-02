@@ -18,7 +18,10 @@ function fallbackTarget(draft: EditorState): FxTarget {
     : { type: "canvas" }
 }
 
-function layerAt(draft: EditorState, id: string): { i: number; layer: EffectLayer } {
+function layerAt(
+  draft: EditorState,
+  id: string
+): { i: number; layer: EffectLayer } {
   const i = draft.document.scene.effects.findIndex((l) => l.id === id)
   if (i === -1) throw new CommandAbort(`unknown effect layer "${id}"`)
   return { i, layer: draft.document.scene.effects[i] }
@@ -47,11 +50,7 @@ export const fxCommands: AnyCommandDef[] = [
     }),
     invalidates: "stack",
     apply: (draft, args, { warn }) => {
-      const layer = normalizeLayer(
-        args as Partial<EffectLayer>,
-        fallbackTarget(draft),
-        warn
-      )
+      const layer = normalizeLayer(args, fallbackTarget(draft), warn)
       if (!layer) {
         throw new CommandAbort(
           `unknown effect "${args.effect}" — read capabilities via motif_read for the catalog`
@@ -114,7 +113,8 @@ export const fxCommands: AnyCommandDef[] = [
     id: "fx.reorder",
     title: "Reorder effect layer",
     group: "Effects",
-    description: "Move a layer up or down the stack (stack order = paint order).",
+    description:
+      "Move a layer up or down the stack (stack order = paint order).",
     schema: z.object({
       id: z.string(),
       direction: z.enum(["up", "down"]),

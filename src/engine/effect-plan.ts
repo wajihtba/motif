@@ -3,11 +3,16 @@
 // strings, full-frame region chains, canvas-wide filters, and the scene-shader
 // chain. Runs on stack/structure changes only, never per frame.
 
-import type { EffectLayer, Scene } from '../scene/types'
-import type { ElementShaderDef, FilterDef, PixelDef, SceneShaderDef } from '../effects/core/types'
-import { get } from '../effects/core/registry'
-import { nodesByRole } from '../scene/model'
-import '../effects' // side effect: register every catalogue
+import type { EffectLayer, Scene } from "../scene/types"
+import type {
+  ElementShaderDef,
+  FilterDef,
+  PixelDef,
+  SceneShaderDef,
+} from "../effects/core/types"
+import { get } from "../effects/core/registry"
+import { nodesByRole } from "../scene/model"
+import "../effects" // side effect: register every catalogue
 
 export interface ResolvedChainLayer {
   def: ElementShaderDef | PixelDef
@@ -59,19 +64,19 @@ export function planEffects(scene: Scene): EffectPlan {
   for (const layer of scene.effects) {
     if (!layer.enabled) continue
 
-    if (layer.kind === 'scene-shader') {
-      const def = get('scene-shader', layer.effect)
+    if (layer.kind === "scene-shader") {
+      const def = get("scene-shader", layer.effect)
       if (!def || !def.frag) continue
       scenePasses.push({ def, layer })
       if (def.animated && layer.animate) animated = true
       continue
     }
 
-    if (layer.kind === 'filter') {
-      const def = get('filter', layer.effect)
+    if (layer.kind === "filter") {
+      const def = get("filter", layer.effect)
       if (!def) continue
       if (def.animated && layer.animate) animated = true
-      if (layer.target.type === 'canvas') {
+      if (layer.target.type === "canvas") {
         canvasFilters.push({ def, layer })
       } else {
         for (const id of targetIds(scene, layer)) {
@@ -83,12 +88,12 @@ export function planEffects(scene: Scene): EffectPlan {
 
     // element-shader / pixel → GL chain
     const def =
-      layer.kind === 'pixel'
-        ? get('pixel', layer.effect)
-        : get('element-shader', layer.effect)
-    if (!def || def.id === 'none') continue
+      layer.kind === "pixel"
+        ? get("pixel", layer.effect)
+        : get("element-shader", layer.effect)
+    if (!def || def.id === "none") continue
     if (def.animated && layer.animate) animated = true
-    if (layer.target.type === 'canvas') {
+    if (layer.target.type === "canvas") {
       canvasChain.push({ def, layer })
     } else {
       for (const id of targetIds(scene, layer)) {
@@ -101,8 +106,8 @@ export function planEffects(scene: Scene): EffectPlan {
 }
 
 function targetIds(scene: Scene, layer: EffectLayer): string[] {
-  if (layer.target.type === 'elements') return layer.target.ids
-  if (layer.target.type === 'role') {
+  if (layer.target.type === "elements") return layer.target.ids
+  if (layer.target.type === "role") {
     return nodesByRole(scene, layer.target.role).map((n) => n.id)
   }
   return []

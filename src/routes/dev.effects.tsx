@@ -44,7 +44,9 @@ function DevEffects() {
   const host = useRef<HTMLDivElement>(null)
   const ctrlRef = useRef<EditorController | null>(null)
   const backendRef = useRef<HtmlCanvasBackend | null>(null)
-  const [caps, setCaps] = useState<ReturnType<typeof detectCapabilities> | null>(null)
+  const [caps, setCaps] = useState<ReturnType<
+    typeof detectCapabilities
+  > | null>(null)
   const [rows, setRows] = useState<SweepRow[]>([])
   const [running, setRunning] = useState(false)
 
@@ -164,7 +166,10 @@ function DevEffects() {
           <table className="text-xs">
             <tbody>
               {rows.map((r) => (
-                <tr key={`${r.kind}:${r.id}`} className="border-b border-border/40">
+                <tr
+                  key={`${r.kind}:${r.id}`}
+                  className="border-b border-border/40"
+                >
                   <td className="py-0.5 pr-2">
                     <Badge
                       variant={r.ok ? "secondary" : "destructive"}

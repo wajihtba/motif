@@ -27,11 +27,7 @@ import {
   sanitizeImageSrc,
   sanitizeStylesheet,
 } from "../scene/validate"
-import {
-  findEffect,
-  paramDefaults,
-  supportsOf,
-} from "../effects/core/registry"
+import { findEffect, paramDefaults, supportsOf } from "../effects/core/registry"
 import "../effects" // register the catalogues before any normalize call
 import { CommandAbort } from "./types"
 
@@ -217,7 +213,7 @@ export function normalizeLayer(
     return null
   }
   const { def } = found
-  const kind = found.kind as EffectLayer["kind"]
+  const kind = found.kind
   const supports = supportsOf(def)
 
   // Params: registry defaults, provided values clamped to declared ranges.
