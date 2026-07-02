@@ -5,6 +5,7 @@
 
 import { registerCommands } from "../types"
 import { docCommands } from "./doc"
+import { animCommands } from "./anim"
 import { fxCommands } from "./fx"
 import { elementCommands } from "./element"
 import { sceneCommands } from "./scene"
@@ -17,5 +18,6 @@ export function registerCoreCommands(): void {
   registerCommands(elementCommands)
   registerCommands(sceneCommands)
   registerCommands(fxCommands)
+  registerCommands(animCommands)
   registerCommands(docCommands)
 }

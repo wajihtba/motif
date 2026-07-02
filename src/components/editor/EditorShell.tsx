@@ -11,6 +11,7 @@ import { ChatStore } from "@/agent/chat"
 import { ChatRail } from "@/components/chat/ChatRail"
 import { InspectorTabs } from "@/components/panels/InspectorTabs"
 import { CanvasStage } from "./CanvasStage"
+import { Timeline } from "./Timeline"
 import { TopBar } from "./TopBar"
 
 export function EditorShell({
@@ -62,6 +63,7 @@ export function EditorShell({
         <CanvasStage ctrl={ctrl} backend={backend} onViewport={setViewport} />
         <InspectorTabs ctrl={ctrl} />
       </div>
+      <Timeline ctrl={ctrl} backend={backend} />
     </div>
   )
 }

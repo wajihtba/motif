@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as EditorProjectIdRouteImport } from './routes/editor.$projectId'
 import { Route as DevEngineRouteImport } from './routes/dev.engine'
 import { Route as DevEffectsRouteImport } from './routes/dev.effects'
+import { Route as DevAnimRouteImport } from './routes/dev.anim'
 import { Route as ApiAgentRouteImport } from './routes/api.agent'
 
 const IndexRoute = IndexRouteImport.update({
@@ -35,6 +36,11 @@ const DevEffectsRoute = DevEffectsRouteImport.update({
   path: '/dev/effects',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DevAnimRoute = DevAnimRouteImport.update({
+  id: '/dev/anim',
+  path: '/dev/anim',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiAgentRoute = ApiAgentRouteImport.update({
   id: '/api/agent',
   path: '/api/agent',
@@ -44,6 +50,7 @@ const ApiAgentRoute = ApiAgentRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/api/agent': typeof ApiAgentRoute
+  '/dev/anim': typeof DevAnimRoute
   '/dev/effects': typeof DevEffectsRoute
   '/dev/engine': typeof DevEngineRoute
   '/editor/$projectId': typeof EditorProjectIdRoute
@@ -51,6 +58,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/api/agent': typeof ApiAgentRoute
+  '/dev/anim': typeof DevAnimRoute
   '/dev/effects': typeof DevEffectsRoute
   '/dev/engine': typeof DevEngineRoute
   '/editor/$projectId': typeof EditorProjectIdRoute
@@ -59,6 +67,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/api/agent': typeof ApiAgentRoute
+  '/dev/anim': typeof DevAnimRoute
   '/dev/effects': typeof DevEffectsRoute
   '/dev/engine': typeof DevEngineRoute
   '/editor/$projectId': typeof EditorProjectIdRoute
@@ -66,13 +75,25 @@ export interface FileRoutesById {
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
-    '/' | '/api/agent' | '/dev/effects' | '/dev/engine' | '/editor/$projectId'
+    | '/'
+    | '/api/agent'
+    | '/dev/anim'
+    | '/dev/effects'
+    | '/dev/engine'
+    | '/editor/$projectId'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/api/agent' | '/dev/effects' | '/dev/engine' | '/editor/$projectId'
+  to:
+    | '/'
+    | '/api/agent'
+    | '/dev/anim'
+    | '/dev/effects'
+    | '/dev/engine'
+    | '/editor/$projectId'
   id:
     | '__root__'
     | '/'
     | '/api/agent'
+    | '/dev/anim'
     | '/dev/effects'
     | '/dev/engine'
     | '/editor/$projectId'
@@ -81,6 +102,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ApiAgentRoute: typeof ApiAgentRoute
+  DevAnimRoute: typeof DevAnimRoute
   DevEffectsRoute: typeof DevEffectsRoute
   DevEngineRoute: typeof DevEngineRoute
   EditorProjectIdRoute: typeof EditorProjectIdRoute
@@ -116,6 +138,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DevEffectsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/dev/anim': {
+      id: '/dev/anim'
+      path: '/dev/anim'
+      fullPath: '/dev/anim'
+      preLoaderRoute: typeof DevAnimRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/agent': {
       id: '/api/agent'
       path: '/api/agent'
@@ -129,6 +158,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ApiAgentRoute: ApiAgentRoute,
+  DevAnimRoute: DevAnimRoute,
   DevEffectsRoute: DevEffectsRoute,
   DevEngineRoute: DevEngineRoute,
   EditorProjectIdRoute: EditorProjectIdRoute,

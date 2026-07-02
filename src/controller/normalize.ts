@@ -28,6 +28,7 @@ import {
   sanitizeStylesheet,
 } from "../scene/validate"
 import { findEffect, paramDefaults, supportsOf } from "../effects/core/registry"
+import { animPreset, presetDefaults } from "../effects/anims/presets"
 import "../effects" // register the catalogues before any normalize call
 import { CommandAbort } from "./types"
 
@@ -285,35 +286,50 @@ export function normalizeTrack(
   fallbackTarget: FxTarget,
   warn: Warn = noWarn
 ): AnimTrack | null {
-  const hasPreset = typeof raw.preset === "string" && raw.preset
   const hasTracks = Array.isArray(raw.tracks) && raw.tracks.length
-  if (!hasPreset && !hasTracks) {
+  let preset: string | undefined
+  let params: Record<string, number> = {}
+  let ambient = false
+
+  if (typeof raw.preset === "string" && raw.preset) {
+    const def = animPreset(raw.preset)
+    if (!def) {
+      warn(`unknown animation preset "${raw.preset}"`)
+      if (!hasTracks) return null
+    } else {
+      preset = def.id
+      ambient = def.ambient
+      params = presetDefaults(def)
+      if (raw.params && typeof raw.params === "object") {
+        for (const p of def.params) {
+          const v = raw.params[p.key]
+          if (typeof v !== "number" || !Number.isFinite(v)) continue
+          const clamped = Math.max(p.min, Math.min(p.max, v))
+          if (clamped !== v)
+            warn(`clamped ${def.id}.${p.key} ${v} → ${clamped}`)
+          params[p.key] = clamped
+        }
+      }
+    }
+  }
+  if (!preset && !hasTracks) {
     warn("dropped animation without preset or keyframes")
     return null
   }
+
   return {
     id: typeof raw.id === "string" ? raw.id : uid("anim"),
     target: normalizeTarget(raw.target, fallbackTarget),
     enabled: raw.enabled !== false,
-    preset: hasPreset ? raw.preset : undefined,
-    params: numericRecord(raw.params),
+    preset,
+    params,
     start: numOr(raw.start, 0),
     duration: raw.duration != null ? numOr(raw.duration, 1) : undefined,
-    loop: raw.loop,
+    loop: raw.loop ?? (preset ? ambient : undefined),
     stagger: raw.stagger != null ? numOr(raw.stagger, 0) : undefined,
     tracks: hasTracks ? raw.tracks : undefined,
     owner: typeof raw.owner === "string" ? raw.owner : undefined,
   }
-}
-
-function numericRecord(v: unknown): Record<string, number> {
-  const out: Record<string, number> = {}
-  if (v && typeof v === "object") {
-    for (const [k, val] of Object.entries(v)) {
-      if (typeof val === "number" && Number.isFinite(val)) out[k] = val
-    }
-  }
-  return out
 }
 
 function numOr(v: unknown, fallback: number): number {

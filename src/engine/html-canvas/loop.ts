@@ -38,6 +38,11 @@ export class FrameLoop {
     return !this.running
   }
 
+  /** Continuous mode (animated content) — running forever by design. */
+  get isContinuous(): boolean {
+    return this.continuous
+  }
+
   whenIdle(): Promise<void> {
     if (!this.running) return Promise.resolve()
     return new Promise((resolve) => this.idleWaiters.push(resolve))

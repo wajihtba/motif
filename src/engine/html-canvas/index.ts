@@ -19,7 +19,9 @@ import type {
   UnitSampler,
 } from "../backend"
 import type { CompiledUnits } from "./paint-units"
+import type { CompiledAnimations } from "../animator"
 import { walk } from "../../scene/model"
+import { compileAnimations, sampleAt } from "../animator"
 import { detectCapabilities } from "../backend"
 import { planEffects } from "../effect-plan"
 import { buildNodeEl, imageTracker } from "./build"
@@ -50,6 +52,12 @@ export class HtmlCanvasBackend implements RendererBackend {
   private disposed = false
   private externalContinuous = false
   private overruns = 0
+  private anims: CompiledAnimations = { byUnit: new Map(), active: false }
+  private externalSampler: UnitSampler | null = null
+  // Timeline playback: deterministic playhead; wall clock only anchors play.
+  private playing = false
+  private playAnchor: number | null = null // loop-t at which playhead was 0
+  private playheadT = 0
   /** Fired when the frame budget is blown twice with custom GLSL present —
    *  the UI disables those layers and tells the agent/user. */
   onBudgetOverrun: ((layerIds: string[]) => void) | null = null
@@ -65,10 +73,21 @@ export class HtmlCanvasBackend implements RendererBackend {
 
     this.measurement = new MeasurementHost(() => this.onImagesSettled())
     this.compositor = new Compositor(this.canvas)
+    this.compositor.sampler = (t, unitId) =>
+      this.externalSampler
+        ? this.externalSampler(t, unitId)
+        : sampleAt(this.anims, t, unitId)
     this.loop = new FrameLoop((t) => {
-      this.pendingT = t
+      // Advance the playhead from the rAF clock while playing; scrubbed or
+      // paused frames render at the stored playhead (deterministic).
+      if (this.playing) {
+        if (this.playAnchor == null) this.playAnchor = t - this.playheadT
+        const duration = this.scene?.timeline.duration ?? 5
+        this.playheadT = (t - this.playAnchor) % Math.max(duration, 0.001)
+      }
+      this.pendingT = this.playheadT
       if (this.canvas.requestPaint) this.canvas.requestPaint()
-      else this.compositor.compose(t)
+      else this.compositor.compose(this.pendingT)
     })
     if ("onpaint" in this.canvas) {
       this.canvas.onpaint = () => {
@@ -114,17 +133,55 @@ export class HtmlCanvasBackend implements RendererBackend {
     this.loop.domMutated()
   }
 
-  /** Recompute the effect plan + whether the loop must run continuously. */
+  /** Recompute the effect plan + animations + loop continuity. */
   private replan(): void {
     if (!this.scene) return
     this.compositor.plan = planEffects(this.scene)
+    this.anims = compileAnimations(this.scene)
     this.updateContinuous()
   }
 
   private updateContinuous(): void {
     this.loop.setContinuous(
-      this.externalContinuous || Boolean(this.compositor.plan?.animated)
+      this.externalContinuous ||
+        this.playing ||
+        Boolean(this.compositor.plan?.animated)
     )
+  }
+
+  // --- timeline playback (the animate preview + timeline UI drive these) ----
+
+  play(): void {
+    if (this.playing) return
+    this.playing = true
+    this.playAnchor = null // re-anchor on the next frame (resume from scrub)
+    this.updateContinuous()
+  }
+
+  pause(): void {
+    this.playing = false
+    this.updateContinuous()
+  }
+
+  /** Deterministic scrub: renders exactly the frame at t. */
+  seek(t: number): void {
+    const duration = this.scene?.timeline.duration ?? 5
+    this.playheadT = Math.max(0, Math.min(t, duration))
+    this.playAnchor = null
+    if (!this.playing) this.loop.invalidate()
+  }
+
+  get playhead(): number {
+    return this.playheadT
+  }
+
+  get isPlaying(): boolean {
+    return this.playing
+  }
+
+  /** Whether the scene has any animation tracks (timeline is meaningful). */
+  get hasAnimations(): boolean {
+    return this.anims.active
   }
 
   /** Frame-budget watchdog: two consecutive over-budget frames disable the
@@ -314,8 +371,9 @@ export class HtmlCanvasBackend implements RendererBackend {
     this.loop.domMutated()
   }
 
+  /** Override the animator (dev harness); null restores it. */
   setSampler(sampler: UnitSampler | null): void {
-    this.compositor.sampler = sampler
+    this.externalSampler = sampler
     this.loop.invalidate()
   }
 
@@ -337,16 +395,17 @@ export class HtmlCanvasBackend implements RendererBackend {
   }
 
   async whenIdle(): Promise<void> {
-    // Settled = all images decoded AND the loop parked. Image loads trigger
-    // re-measure + repaint, so poll until a full quiet pass.
+    // Settled = all images decoded AND the loop parked — except in continuous
+    // mode (animated effects/playback), where "settled" means content loaded;
+    // the loop runs forever by design and must not block callers.
     const quiet = () =>
       this.measurement.pendingImages() === 0 &&
       this.canvasImages.pending() === 0 &&
-      this.loop.idle
+      (this.loop.idle || this.loop.isContinuous)
     for (let i = 0; i < 240 && !quiet(); i++) {
       await nextFrame()
     }
-    await this.loop.whenIdle()
+    if (!this.loop.isContinuous) await this.loop.whenIdle()
   }
 
   /** Re-read boxes after content-driven size changes (images, fonts, edits). */
