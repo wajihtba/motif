@@ -10,14 +10,14 @@ import { UnsupportedGate } from "@/components/editor/UnsupportedGate"
 import { EditorController } from "@/controller"
 import { detectCapabilities } from "@/engine/backend"
 import { HtmlCanvasBackend } from "@/engine/html-canvas"
-import { starterDocument } from "@/content/starter"
 
 export const Route = createFileRoute("/editor/$projectId")({
   component: EditorPage,
 })
 
 function EditorPage() {
-  const [ctrl] = useState(() => new EditorController(starterDocument()))
+  // Starts EMPTY — the first watchable generation is the product moment.
+  const [ctrl] = useState(() => new EditorController())
   const [caps, setCaps] = useState<RendererCapabilities | null>(null)
   const [backend, setBackend] = useState<HtmlCanvasBackend | null>(null)
 
