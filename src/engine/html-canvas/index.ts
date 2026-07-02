@@ -62,7 +62,7 @@ export class HtmlCanvasBackend implements RendererBackend {
    *  the UI disables those layers and tells the agent/user. */
   onBudgetOverrun: ((layerIds: string[]) => void) | null = null
 
-  constructor() {
+  constructor(private opts: { forceDpr?: number } = {}) {
     this.capabilities = detectCapabilities()
     this.stage = document.createElement("div")
     this.stage.dataset.motif = "stage"
@@ -110,7 +110,8 @@ export class HtmlCanvasBackend implements RendererBackend {
 
   setScene(scene: Scene): void {
     this.scene = scene
-    this.dpr = currentDpr()
+    // Export sessions force dpr=1: backing = exact format pixels.
+    this.dpr = this.opts.forceDpr ?? currentDpr()
     sizeSceneCanvas(this.canvas, scene.baseWidth, scene.baseHeight, this.dpr)
     this.stage.style.width = `${scene.baseWidth}px`
     this.stage.style.height = `${scene.baseHeight}px`

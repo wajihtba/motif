@@ -15,6 +15,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
+import { ExportMenu } from "./ExportMenu"
 import { useEditorState } from "@/hooks/use-document-store"
 
 export interface TopBarViewport {
@@ -149,16 +150,7 @@ export function TopBar({
           </Button>
         </ButtonGroup>
 
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <span>
-              <Button size="sm" disabled>
-                Export
-              </Button>
-            </span>
-          </TooltipTrigger>
-          <TooltipContent>PNG/video export lands with M5</TooltipContent>
-        </Tooltip>
+        <ExportMenu ctrl={ctrl} />
       </header>
     </TooltipProvider>
   )

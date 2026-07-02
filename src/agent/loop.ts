@@ -15,6 +15,7 @@
 
 import type { EditorController, CommandCall } from "../controller"
 import type { ApiMessage, ChatStore } from "./chat"
+import { exportImage } from "../engine/export"
 import { contextBlock } from "./prompts"
 import { parsePartialJson } from "./partial-json"
 
@@ -366,7 +367,7 @@ export class AgentSession {
 
       case "motif_export": {
         const type = input.type === "jpeg" ? "jpeg" : "png"
-        const blob = await exportCanvas(ctrl, type)
+        const blob = await exportImage(ctrl.store.state.document.scene, type)
         this.deps.deliverFile?.(
           blob,
           `${ctrl.store.state.document.name || "motif"}.${type === "jpeg" ? "jpg" : "png"}`
@@ -495,25 +496,6 @@ function countNodes(input: unknown): number {
   const root = (input as { root?: unknown }).root
   if (root) walk(root)
   return Math.max(count - 1, 0) // don't count the root container
-}
-
-async function exportCanvas(
-  ctrl: EditorController,
-  type: "png" | "jpeg"
-): Promise<Blob> {
-  const backend = ctrl.backendRef as { canvas?: HTMLCanvasElement } | null
-  const canvas = backend?.canvas
-  if (!canvas) throw new Error("no canvas mounted")
-  return new Promise((resolve, reject) => {
-    canvas.toBlob(
-      (blob) =>
-        blob
-          ? resolve(blob)
-          : reject(new Error("export failed — canvas may be tainted")),
-      type === "jpeg" ? "image/jpeg" : "image/png",
-      0.95
-    )
-  })
 }
 
 // --- HTTP transport ---------------------------------------------------------------

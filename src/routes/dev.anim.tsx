@@ -22,19 +22,32 @@ interface Bench {
   done: boolean
 }
 
+interface ExportBench {
+  ms: number
+  bytes: number
+  container: string
+  frames: number
+  deterministic: boolean
+  error?: string
+  done: boolean
+}
+
 declare global {
   interface Window {
     __animBench?: Bench
+    __exportBench?: ExportBench
   }
 }
 
 function DevAnim() {
   const host = useRef<HTMLDivElement>(null)
   const backendRef = useRef<HtmlCanvasBackend | null>(null)
+  const ctrlRef = useRef<EditorController | null>(null)
   const [caps, setCaps] = useState<ReturnType<
     typeof detectCapabilities
   > | null>(null)
   const [bench, setBench] = useState<Bench | null>(null)
+  const [exportBench, setExportBench] = useState<ExportBench | null>(null)
   const [running, setRunning] = useState(false)
 
   useEffect(() => {
@@ -44,6 +57,7 @@ function DevAnim() {
   useEffect(() => {
     if (!caps?.liveCanvas || !host.current) return
     const ctrl = new EditorController(starterDocument("Anim bench"))
+    ctrlRef.current = ctrl
     const backend = new HtmlCanvasBackend()
     backend.mount(host.current)
     ctrl.attachBackend(backend)
@@ -116,6 +130,43 @@ function DevAnim() {
     setRunning(false)
   }
 
+  const runExport = async () => {
+    if (running) return
+    setRunning(true)
+    window.__exportBench = undefined
+    try {
+      const { exportVideo } = await import("@/engine/export")
+      const ctrl = ctrlRef.current!
+      const scene = ctrl.store.state.document.scene
+      const started = performance.now()
+      const a = await exportVideo(scene)
+      const ms = performance.now() - started
+      const b = await exportVideo(scene) // determinism: same probe frame hash
+      window.__exportBench = {
+        ms: Math.round(ms),
+        bytes: a.blob.size,
+        container: a.container,
+        frames: a.frames,
+        deterministic: a.probeHash === b.probeHash && a.probeHash !== "",
+        done: true,
+      }
+      setExportBench(window.__exportBench)
+    } catch (e) {
+      window.__exportBench = {
+        ms: 0,
+        bytes: 0,
+        container: "",
+        frames: 0,
+        deterministic: false,
+        error: (e as Error).message || String(e),
+        done: true,
+      }
+      setExportBench(window.__exportBench)
+    } finally {
+      setRunning(false)
+    }
+  }
+
   if (!import.meta.env.DEV) {
     return <p className="p-6 text-sm">Dev harness — development builds only.</p>
   }
@@ -131,6 +182,20 @@ function DevAnim() {
         <Button size="sm" onClick={run} disabled={running}>
           {running ? "Benching…" : "Run 3s bench + determinism check"}
         </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={runExport}
+          disabled={running}
+        >
+          Export video bench
+        </Button>
+        {exportBench && (
+          <Badge variant={exportBench.error ? "destructive" : "default"}>
+            {exportBench.error ??
+              `${exportBench.container} · ${exportBench.frames}f · ${(exportBench.bytes / 1e6).toFixed(1)}MB · ${(exportBench.ms / 1000).toFixed(1)}s${exportBench.deterministic ? " · deterministic" : " · NON-DET"}`}
+          </Badge>
+        )}
         {bench && (
           <>
             <Badge variant={bench.fps >= 55 ? "default" : "destructive"}>
