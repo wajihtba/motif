@@ -65,14 +65,25 @@ export function detectCapabilities(): RendererCapabilities {
   return { liveCanvas, shaders, video }
 }
 
+/** Structurally identical to immer's Patch — declared here so the engine
+ *  interface doesn't import a state library. */
+export interface EnginePatch {
+  op: "replace" | "remove" | "add"
+  path: Array<string | number>
+  value?: unknown
+}
+
 export interface RendererBackend {
   readonly capabilities: RendererCapabilities
   /** The element to place in the editor's canvas well (the artboard). */
   readonly stage: HTMLElement
   mount: (host: HTMLElement) => void
-  /** Full (re)mount of a scene. Incremental patching arrives with M1's
-   *  dom-patch.ts — the single DOM writer this backend exposes. */
+  /** Full (re)mount of a scene (load / format switch). */
   setScene: (scene: Scene) => void
+  /** Incremental update from a dispatch transaction: immer patches are
+   *  classified into minimal DOM operations (dom-patch.ts). Falls back to
+   *  remount internally when the unit split or scene shape changed. */
+  applyTransaction?: (scene: Scene, patches: EnginePatch[]) => void
   /** Plug the per-unit motion sampler (animator in M4; harness stubs in M0). */
   setSampler: (sampler: UnitSampler | null) => void
   /** Keep rendering every frame (motion preview). Off = demand-driven idle. */

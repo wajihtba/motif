@@ -3,6 +3,7 @@
 // React and no UI: the editor shell, the agent loop, and tests all drive it
 // through the same three calls — dispatch / undo / redo.
 
+import type { Patch } from "immer"
 import type { RendererBackend } from "../engine/backend"
 import type { Document } from "../scene/types"
 import type { CommandCall, DispatchOptions, DispatchResult } from "./dispatch"
@@ -33,7 +34,9 @@ export class EditorController {
     opts: DispatchOptions = {}
   ): DispatchResult {
     const result = this.dispatcher.dispatch(calls, opts)
-    if (result.ok) this.syncEngine(result.invalidation)
+    if (result.ok) {
+      this.syncEngine(result.invalidation, result.entry?.patches ?? [])
+    }
     return result
   }
 
@@ -41,7 +44,7 @@ export class EditorController {
     const entry = this.history.undo()
     if (entry) {
       this.store.applyRaw(entry.inversePatches)
-      this.syncEngine("scene")
+      this.syncEngine("scene", entry.inversePatches)
     }
     return entry
   }
@@ -50,7 +53,7 @@ export class EditorController {
     const entry = this.history.redo()
     if (entry) {
       this.store.applyRaw(entry.patches)
-      this.syncEngine("scene")
+      this.syncEngine("scene", entry.patches)
     }
     return entry
   }
@@ -81,15 +84,21 @@ export class EditorController {
   load(document: Document): void {
     this.store.load(document)
     this.history.clear()
-    this.syncEngine("scene")
+    this.syncEngine("scene", [])
   }
 
-  /** Push a transaction's effect to the renderer. M1-b's dom-patch.ts will
-   *  consume patch classes incrementally; until then anything visible is a
-   *  full re-mount (correct, just not minimal). */
-  private syncEngine(invalidation: Invalidation): void {
+  /** Push a transaction's effect to the renderer: incremental via the
+   *  dom-patch classifier when the backend supports it, remount otherwise.
+   *  `invalidation` gates the no-op case; the classifier re-derives the
+   *  per-node detail from the patches themselves (one source of truth). */
+  private syncEngine(invalidation: Invalidation, patches: Patch[]): void {
     if (!this.backend || invalidation === "none") return
-    this.backend.setScene(this.store.state.document.scene)
+    const scene = this.store.state.document.scene
+    if (this.backend.applyTransaction && patches.length) {
+      this.backend.applyTransaction(scene, patches)
+    } else {
+      this.backend.setScene(scene)
+    }
   }
 }
 

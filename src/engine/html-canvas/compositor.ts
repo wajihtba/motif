@@ -40,13 +40,17 @@ export class Compositor {
   sampler: UnitSampler | null = null
 
   constructor(readonly canvas: HTMLCanvasElement) {
-    this.ctx = canvas.getContext("2d")!
-    const ctx = this.ctx
-    this.draw = ctx.drawElementImage
-      ? ctx.drawElementImage.bind(ctx)
-      : ctx.drawElement
-        ? ctx.drawElement.bind(ctx)
-        : null
+    // getContext can return null (jsdom in tests) — the DOM-patching half of
+    // the engine still works; only painting no-ops (draw stays null).
+    const ctx = canvas.getContext("2d")
+    this.ctx = ctx!
+    this.draw = !ctx
+      ? null
+      : ctx.drawElementImage
+        ? ctx.drawElementImage.bind(ctx)
+        : ctx.drawElement
+          ? ctx.drawElement.bind(ctx)
+          : null
   }
 
   get supported(): boolean {

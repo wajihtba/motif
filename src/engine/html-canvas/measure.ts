@@ -16,9 +16,11 @@ import { buildNodeEl, imageTracker } from "./build"
 
 export class MeasurementHost {
   readonly el: HTMLElement
-  private els = new Map<string, HTMLElement>()
+  /** Node id → element. Shared with dom-patch (the single writer). */
+  readonly els = new Map<string, HTMLElement>()
   private boxes = new Map<string, Box>()
   private tracker: ReturnType<typeof imageTracker>
+  private styleEl = document.createElement("style")
 
   constructor(onImagesSettled: () => void) {
     this.el = document.createElement("div")
@@ -42,15 +44,30 @@ export class MeasurementHost {
   setScene(scene: Scene): void {
     this.el.style.width = `${scene.baseWidth}px`
     this.el.style.height = `${scene.baseHeight}px`
-    for (const [k, v] of Object.entries(themeVars(scene.theme))) {
-      this.el.style.setProperty(k, v)
-    }
-    this.els = new Map()
+    this.applySceneStyle(scene)
+    this.els.clear()
     const root = buildNodeEl(scene.root, {
       index: this.els,
       trackImage: this.tracker.trackImage,
     })
-    this.el.replaceChildren(root)
+    this.el.replaceChildren(this.styleEl, root)
+  }
+
+  /** Theme vars + shared stylesheet — layout in the host must see the same
+   *  CSS the canvas paints with. */
+  applySceneStyle(scene: Scene): void {
+    for (const [k, v] of Object.entries(themeVars(scene.theme))) {
+      this.el.style.setProperty(k, v)
+    }
+    this.styleEl.textContent = scene.stylesheet ?? ""
+  }
+
+  elOf(id: string): HTMLElement | null {
+    return this.els.get(id) ?? null
+  }
+
+  get trackImage() {
+    return this.tracker.trackImage
   }
 
   /** Read every node's box relative to the host (forces a synchronous layout —
@@ -59,6 +76,10 @@ export class MeasurementHost {
     const hostRect = this.el.getBoundingClientRect()
     this.boxes = new Map()
     for (const [id, el] of this.els) {
+      if (!el.isConnected) {
+        this.els.delete(id) // pruned by a subtree rebuild
+        continue
+      }
       const r = el.getBoundingClientRect()
       this.boxes.set(id, {
         x: r.left - hostRect.left,

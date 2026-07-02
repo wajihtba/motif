@@ -45,9 +45,11 @@ export interface PaintUnit {
 export interface CompiledUnits {
   /** Background fill (an element, because `background` is arbitrary CSS). */
   bgEl: HTMLElement
+  /** The shared-stylesheet element in the canvas DOM. */
+  styleEl: HTMLStyleElement
   /** Paint order: background unit first, then extracted units in DFS order. */
   units: PaintUnit[]
-  /** Node id → canvas-DOM element (for M1's incremental dom-patch). */
+  /** Node id → canvas-DOM element (for dom-patch, the single DOM writer). */
   els: Map<string, HTMLElement>
 }
 
@@ -150,8 +152,11 @@ export function compileUnits(
   // old parent; inside the canvas it is positioned by the compositor instead).
   // Nested unit roots inside a unit become holes in it, exactly like the root.
   for (const node of orderedUnitRoots(scene, roots)) {
-    const box = measure(node.id)
-    if (!box || box.w < 1 || box.h < 1) continue
+    // A zero/unknown box is NOT a reason to skip: content may simply not be
+    // measurable yet (pending image, font swap) — the hole already exists in
+    // the background unit, so skipping would vanish the node entirely.
+    // refreshMeasurements() updates the box once content settles.
+    const box = measure(node.id) ?? { x: 0, y: 0, w: 1, h: 1 }
     const innerHoles = new Set([...roots].filter((id) => id !== node.id))
     const el = buildNodeEl(node, {
       index: els,
@@ -171,12 +176,12 @@ export function compileUnits(
   }
 
   canvas.replaceChildren(styleEl, bgEl, ...units.map((u) => u.el))
-  return { bgEl, units, els }
+  return { bgEl, styleEl, units, els }
 }
 
 /** Pin a unit element at the canvas origin with a fixed px size: capture
  *  always reads the (0,0,w,h) region; the compositor places it at its box. */
-function pinUnitEl(el: HTMLElement, box: Box): void {
+export function pinUnitEl(el: HTMLElement, box: Box): void {
   Object.assign(el.style, {
     position: "absolute",
     left: "0px",
