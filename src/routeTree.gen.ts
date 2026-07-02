@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as EditorProjectIdRouteImport } from './routes/editor.$projectId'
 import { Route as DevEngineRouteImport } from './routes/dev.engine'
+import { Route as ApiAgentRouteImport } from './routes/api.agent'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -28,33 +29,42 @@ const DevEngineRoute = DevEngineRouteImport.update({
   path: '/dev/engine',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiAgentRoute = ApiAgentRouteImport.update({
+  id: '/api/agent',
+  path: '/api/agent',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/api/agent': typeof ApiAgentRoute
   '/dev/engine': typeof DevEngineRoute
   '/editor/$projectId': typeof EditorProjectIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/api/agent': typeof ApiAgentRoute
   '/dev/engine': typeof DevEngineRoute
   '/editor/$projectId': typeof EditorProjectIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/api/agent': typeof ApiAgentRoute
   '/dev/engine': typeof DevEngineRoute
   '/editor/$projectId': typeof EditorProjectIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/dev/engine' | '/editor/$projectId'
+  fullPaths: '/' | '/api/agent' | '/dev/engine' | '/editor/$projectId'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/dev/engine' | '/editor/$projectId'
-  id: '__root__' | '/' | '/dev/engine' | '/editor/$projectId'
+  to: '/' | '/api/agent' | '/dev/engine' | '/editor/$projectId'
+  id: '__root__' | '/' | '/api/agent' | '/dev/engine' | '/editor/$projectId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  ApiAgentRoute: typeof ApiAgentRoute
   DevEngineRoute: typeof DevEngineRoute
   EditorProjectIdRoute: typeof EditorProjectIdRoute
 }
@@ -82,11 +92,19 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DevEngineRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/agent': {
+      id: '/api/agent'
+      path: '/api/agent'
+      fullPath: '/api/agent'
+      preLoaderRoute: typeof ApiAgentRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  ApiAgentRoute: ApiAgentRoute,
   DevEngineRoute: DevEngineRoute,
   EditorProjectIdRoute: EditorProjectIdRoute,
 }

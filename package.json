@@ -13,6 +13,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.110.0",
     "@base-ui/react": "^1.6.0",
     "@fontsource-variable/montserrat": "^5.2.8",
     "@hugeicons/core-free-icons": "^4.2.2",
