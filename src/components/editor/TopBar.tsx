@@ -2,8 +2,11 @@
 // zoom controls, export (arrives M5). Every action dispatches commands —
 // the same seam the agent uses.
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useSyncExternalStore } from "react"
+import { Link } from "@tanstack/react-router"
+import type { ChatStore } from "@/agent/chat"
 import type { EditorController } from "@/controller"
+import type { Autosaver } from "@/persistence/autosave"
 import { Button } from "@/components/ui/button"
 import { ButtonGroup } from "@/components/ui/button-group"
 import { Input } from "@/components/ui/input"
@@ -36,9 +39,15 @@ export interface TopBarViewport {
 export function TopBar({
   ctrl,
   viewport,
+  saver = null,
+  chat,
+  projectId,
 }: {
   ctrl: EditorController
   viewport: TopBarViewport | null
+  saver?: Autosaver | null
+  chat?: ChatStore
+  projectId?: string
 }) {
   const state = useEditorState(ctrl)
   const [editingName, setEditingName] = useState(false)
@@ -64,9 +73,12 @@ export function TopBar({
   return (
     <TooltipProvider delayDuration={300}>
       <header className="flex h-12 shrink-0 items-center gap-3 border-b bg-background px-3">
-        <span className="text-sm font-bold tracking-wide select-none">
+        <Link
+          to="/"
+          className="rounded px-1 text-sm font-bold tracking-wide select-none hover:bg-muted"
+        >
           Motif
-        </span>
+        </Link>
         <div className="h-5 w-px bg-border" />
         {editingName ? (
           <Input
@@ -115,6 +127,7 @@ export function TopBar({
           </SelectContent>
         </Select>
         <BrandKitDialog ctrl={ctrl} />
+        {saver && <SaveBadge saver={saver} />}
 
         <div className="flex-1" />
 
@@ -176,8 +189,24 @@ export function TopBar({
           </Button>
         </ButtonGroup>
 
-        <ExportMenu ctrl={ctrl} />
+        <ExportMenu ctrl={ctrl} chat={chat} projectId={projectId} />
       </header>
     </TooltipProvider>
+  )
+}
+
+function SaveBadge({ saver }: { saver: Autosaver }) {
+  const state = useSyncExternalStore(
+    (fn) => saver.subscribe(fn),
+    () => saver.state,
+    () => "saved" as const
+  )
+  return (
+    <span
+      className="text-[11px] text-muted-foreground tabular-nums select-none"
+      data-motif="save-badge"
+    >
+      {state === "saved" ? "Saved" : state === "saving" ? "Saving…" : "Edited"}
+    </span>
   )
 }

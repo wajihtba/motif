@@ -4,6 +4,7 @@
 // notice (WebM when H.264 encode is unavailable).
 
 import { useRef, useState } from "react"
+import type { ChatStore } from "@/agent/chat"
 import type { EditorController } from "@/controller"
 import { Button } from "@/components/ui/button"
 import {
@@ -23,10 +24,20 @@ import {
 import { Progress } from "@/components/ui/progress"
 import { FORMATS } from "@/content/formats"
 import { exportImage, exportVideo } from "@/engine/export"
+import { exportMotifFile } from "@/persistence/motif-file"
+import { getProject } from "@/persistence/projects"
 import { resolveForFormat } from "@/scene/variants"
 import { useEditorState } from "@/hooks/use-document-store"
 
-export function ExportMenu({ ctrl }: { ctrl: EditorController }) {
+export function ExportMenu({
+  ctrl,
+  chat,
+  projectId,
+}: {
+  ctrl: EditorController
+  chat?: ChatStore
+  projectId?: string
+}) {
   const state = useEditorState(ctrl)
   const [busy, setBusy] = useState(false)
   const [video, setVideo] = useState<{
@@ -64,6 +75,29 @@ export function ExportMenu({ ctrl }: { ctrl: EditorController }) {
         const blob = await exportImage(derived, "png")
         download(blob, `${name}-${f.key}.png`)
       }
+    } catch (e) {
+      alertError(e)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  // The project file: live document + transcript + referenced asset blobs.
+  const motifFile = async () => {
+    if (busy || !projectId) return
+    setBusy(true)
+    try {
+      const stored = await getProject(projectId)
+      const now = Date.now()
+      const blob = await exportMotifFile({
+        id: projectId,
+        name: ctrl.store.state.document.name,
+        document: ctrl.store.state.document,
+        chat: chat?.serialize() ?? { items: [], apiMessages: [] },
+        createdAt: stored?.createdAt ?? now,
+        updatedAt: now,
+      })
+      download(blob, `${name}.motif`)
     } catch (e) {
       alertError(e)
     } finally {
@@ -129,6 +163,11 @@ export function ExportMenu({ ctrl }: { ctrl: EditorController }) {
           <DropdownMenuItem onClick={() => void allFormats()}>
             All formats · {FORMATS.length} PNGs
           </DropdownMenuItem>
+          {projectId && (
+            <DropdownMenuItem onClick={() => void motifFile()}>
+              Project file · .motif
+            </DropdownMenuItem>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
 

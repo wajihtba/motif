@@ -3,24 +3,10 @@
 // at DOM-build time. This closes v1's canvas-taint hazard: local blobs are
 // always same-origin, so export never fails on a CORS-dirty photo.
 
-import type { IDBPDatabase } from "idb"
-import { openDB } from "idb"
 import { setAssetResolver } from "../engine/html-canvas/build"
+import { ASSET_STORE as STORE, db } from "./db"
 
-const DB = "motif"
-const STORE = "assets"
-
-let dbPromise: Promise<IDBPDatabase> | null = null
 const objectUrls = new Map<string, string>()
-
-function db(): Promise<IDBPDatabase> {
-  dbPromise ??= openDB(DB, 1, {
-    upgrade(d) {
-      if (!d.objectStoreNames.contains(STORE)) d.createObjectStore(STORE)
-    },
-  })
-  return dbPromise
-}
 
 /** Store a blob; returns its `asset:<id>` URL for use in scenes. */
 export async function putAsset(blob: Blob, id?: string): Promise<string> {
@@ -55,6 +41,12 @@ export async function primeAssets(): Promise<void> {
     const blob = (await d.get(STORE, key)) as Blob | undefined
     if (blob) objectUrls.set(key, URL.createObjectURL(blob))
   }
+}
+
+/** Raw blob for an asset (`.motif` export packs these into the zip). */
+export async function getAssetBlob(assetUrl: string): Promise<Blob | null> {
+  const key = assetUrl.replace(/^asset:/, "")
+  return ((await (await db()).get(STORE, key)) as Blob | undefined) ?? null
 }
 
 /** Synchronous resolver the DOM builder uses (asset: → object URL). */

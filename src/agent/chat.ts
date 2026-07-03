@@ -135,4 +135,52 @@ export class ChatStore {
     }
     this.emit()
   }
+
+  /** Snapshot for persistence (autosave / .motif export). */
+  serialize(): { items: ChatItem[]; apiMessages: ApiMessage[] } {
+    return { items: [...this.itemsList], apiMessages: [...this.apiMessages] }
+  }
+
+  /** Restore a persisted transcript. Streaming/running flags are settled and
+   *  history seqs dropped — they referenced a previous session's undo stack —
+   *  and the API history is compacted so long projects replay affordably. */
+  hydrate(stored: { items: ChatItem[]; apiMessages: ApiMessage[] }): void {
+    this.itemsList = stored.items.map((i) =>
+      i.kind === "text"
+        ? { ...i, streaming: false }
+        : {
+            ...i,
+            state: i.state === "running" ? ("applied" as const) : i.state,
+            historySeq: undefined,
+            undone: false,
+          }
+    )
+    for (const item of this.itemsList) {
+      const n = Number(item.id.replace(/^c/, ""))
+      if (Number.isFinite(n)) this.counter = Math.max(this.counter, n)
+    }
+    this.apiMessages.length = 0
+    this.apiMessages.push(...compactApiMessages(stored.apiMessages))
+    this.emit()
+  }
+}
+
+/** Trim replay history to roughly the last `max` messages, cutting only at a
+ *  plain user message (never between a tool_use and its tool_result) so the
+ *  remainder is still a valid Messages-API conversation. Durable intent
+ *  survives compaction by design: the brief + brand kit live on the document
+ *  and are re-injected into every turn's context block. */
+export function compactApiMessages(
+  messages: ApiMessage[],
+  max = 40
+): ApiMessage[] {
+  if (messages.length <= max) return messages
+  for (let i = messages.length - max; i < messages.length; i++) {
+    const m = messages[i]
+    if (m.role === "user" && !m.content.some((b) => b.type === "tool_result")) {
+      return messages.slice(i)
+    }
+  }
+  // No clean boundary in the tail — keep everything rather than corrupt it.
+  return messages
 }
