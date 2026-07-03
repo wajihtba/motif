@@ -10,6 +10,7 @@ import type { TopBarViewport } from "./TopBar"
 import { Interaction } from "@/engine/interaction"
 import { Viewport } from "@/engine/viewport"
 import { useEditorState } from "@/hooks/use-document-store"
+import { InlineTextEditor } from "./InlineTextEditor"
 
 export function CanvasStage({
   ctrl,
@@ -24,6 +25,7 @@ export function CanvasStage({
   const fitRef = useRef<HTMLDivElement>(null)
   const interactionRef = useRef<Interaction | null>(null)
   const [zoom, setZoom] = useState(1)
+  const [editingId, setEditingId] = useState<string | null>(null)
   const state = useEditorState(ctrl)
   const scene = state.document.scene
 
@@ -52,6 +54,7 @@ export function CanvasStage({
       dispatch: (calls, opts) => ctrl.dispatch(calls, opts),
       beginGesture: (label) => ctrl.beginGesture(label),
       endGesture: () => ctrl.endGesture(),
+      onEditText: (node) => setEditingId(node.id),
     })
     interactionRef.current = interaction
     viewport.fitToView()
@@ -111,6 +114,14 @@ export function CanvasStage({
           zoom={zoom}
           onResizeStart={(e) => interactionRef.current?.startResize(e)}
         />
+        {editingId && (
+          <InlineTextEditor
+            ctrl={ctrl}
+            backend={backend}
+            nodeId={editingId}
+            onClose={() => setEditingId(null)}
+          />
+        )}
         {/* format label under the artboard */}
         <div
           className="absolute text-muted-foreground select-none"

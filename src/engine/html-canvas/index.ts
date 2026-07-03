@@ -206,6 +206,32 @@ export class HtmlCanvasBackend implements RendererBackend {
     return this.compositor.pipeline()?.compileCheck(kind, frag) ?? null
   }
 
+  // --- inline text editing ---------------------------------------------------
+  // While a node is edited in a contenteditable overlay, its canvas-DOM copy
+  // is visibility-hidden so the painted pixels don't double under the overlay.
+  // The measurement copy stays visible-to-layout, so boxes keep measuring.
+  private editingId: string | null = null
+
+  setEditingNode(id: string | null): void {
+    if (this.editingId && this.editingId !== id) {
+      const prev = this.compiled?.els.get(this.editingId)
+      if (prev) prev.style.visibility = ""
+    }
+    this.editingId = id
+    if (id) {
+      const el = this.compiled?.els.get(id)
+      if (el) el.style.visibility = "hidden"
+    }
+    this.compositor.markUnitsStale()
+    this.loop.domMutated()
+  }
+
+  /** The measurement-host element for a node — the overlay editor copies its
+   *  computed text styles so editing looks like the painted result. */
+  hostElOf(id: string): HTMLElement | null {
+    return this.measurement.elOf(id)
+  }
+
   /** Pointer in normalized canvas coords (pointer-following scene shaders). */
   setPointer(nx: number, ny: number): void {
     this.compositor.pointer = [nx, ny]

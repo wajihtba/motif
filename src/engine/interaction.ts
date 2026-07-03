@@ -28,6 +28,8 @@ export interface InteractionDeps {
   ) => unknown
   beginGesture: (label: string) => void
   endGesture: () => void
+  /** Double-click on an html leaf — the shell opens the inline text editor. */
+  onEditText?: (node: SceneNode) => void
 }
 
 export class Interaction {
@@ -36,11 +38,29 @@ export class Interaction {
   constructor(private deps: InteractionDeps) {
     const { stage } = deps
     stage.addEventListener("pointerdown", this.onPointerDown)
+    stage.addEventListener("dblclick", this.onDoubleClick)
     window.addEventListener("keydown", this.onKey)
     this.disposers.push(
       () => stage.removeEventListener("pointerdown", this.onPointerDown),
+      () => stage.removeEventListener("dblclick", this.onDoubleClick),
       () => window.removeEventListener("keydown", this.onKey)
     )
+  }
+
+  private onDoubleClick = (e: MouseEvent) => {
+    if (this.deps.isPanning() || !this.deps.onEditText) return
+    const r = this.deps.stage.getBoundingClientRect()
+    const scale = this.deps.scale()
+    const hit = this.hitTest(
+      (e.clientX - r.left) / scale,
+      (e.clientY - r.top) / scale
+    )
+    // Only html leaves are text-editable in place.
+    if (hit && hit.html !== undefined && !hit.children?.length) {
+      this.select([hit.id])
+      this.deps.onEditText(hit)
+      e.preventDefault()
+    }
   }
 
   /** Topmost node under a scene-px point. Later-painted (deeper / later

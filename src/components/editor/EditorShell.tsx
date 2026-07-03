@@ -12,6 +12,8 @@ import type { TopBarViewport } from "./TopBar"
 import { ChatRail } from "@/components/chat/ChatRail"
 import { InspectorTabs } from "@/components/panels/InspectorTabs"
 import { CanvasStage } from "./CanvasStage"
+import { CommandPalette } from "./CommandPalette"
+import { HelpDialog } from "./HelpDialog"
 import { Timeline } from "./Timeline"
 import { TopBar } from "./TopBar"
 
@@ -31,6 +33,43 @@ export function EditorShell({
   projectId: string
 }) {
   const [viewport, setViewport] = useState<TopBarViewport | null>(null)
+  const [paletteOpen, setPaletteOpen] = useState(false)
+  const [helpOpen, setHelpOpen] = useState(false)
+
+  // App-level shortcuts: ⌘K palette, ⌘/ help, ⌘D duplicate, ⌘S save-now.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const mod = e.metaKey || e.ctrlKey
+      if (!mod) return
+      const t = e.target as HTMLElement
+      const typing =
+        t.isContentEditable || t.tagName === "INPUT" || t.tagName === "TEXTAREA"
+      if (e.key.toLowerCase() === "k") {
+        e.preventDefault()
+        setPaletteOpen((o) => !o)
+      } else if (e.key === "/") {
+        e.preventDefault()
+        setHelpOpen((o) => !o)
+      } else if (e.key.toLowerCase() === "s") {
+        e.preventDefault()
+        void saver?.flush()
+      } else if (e.key.toLowerCase() === "d" && !typing) {
+        e.preventDefault()
+        const selection = ctrl.store.state.selection
+        if (selection.length) {
+          ctrl.dispatch(
+            selection.map((id) => ({
+              command: "element.duplicate",
+              args: { id },
+            })),
+            { label: "Duplicate" }
+          )
+        }
+      }
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [ctrl, saver])
 
   // GPU watchdog: two over-budget frames disable custom-GLSL layers and put
   // the reason in the transcript, where the agent will see it next turn.
@@ -68,6 +107,15 @@ export function EditorShell({
         <InspectorTabs ctrl={ctrl} />
       </div>
       <Timeline ctrl={ctrl} backend={backend} />
+      <CommandPalette
+        open={paletteOpen}
+        onOpenChange={setPaletteOpen}
+        ctrl={ctrl}
+        backend={backend}
+        viewport={viewport}
+        openHelp={() => setHelpOpen(true)}
+      />
+      <HelpDialog open={helpOpen} onOpenChange={setHelpOpen} />
     </div>
   )
 }
