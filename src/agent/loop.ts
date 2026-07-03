@@ -119,12 +119,26 @@ export class AgentSession {
     const last = messages[messages.length - 1]
     if (last.role === "user") {
       const state = ctrl.store.state
+      const kit = state.document.brandKit
       last.content.push({
         type: "text",
         text: contextBlock({
           summary: ctrl.describe({ level: "summary" }),
           selection: state.selection,
           userEdits: this.userEditsSince(),
+          brand: kit
+            ? [
+                Object.entries(kit.palette)
+                  .map(([k, v]) => `${k}=${v}`)
+                  .join(" "),
+                kit.fontHeading && `heading=${kit.fontHeading}`,
+                kit.fontBody && `body=${kit.fontBody}`,
+                kit.voice && `voice: ${kit.voice}`,
+                kit.logo && `logo: ${kit.logo}`,
+              ]
+                .filter(Boolean)
+                .join(" · ")
+            : undefined,
         }),
       })
     }

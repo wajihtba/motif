@@ -22,6 +22,7 @@ import {
 import { Slider } from "@/components/ui/slider"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
+import { LOOKS } from "@/content/looks"
 import { findEffect, groups } from "@/effects/core/registry"
 import "@/effects"
 import { useEditorState } from "@/hooks/use-document-store"
@@ -45,8 +46,43 @@ export function EffectsPanel({ ctrl }: { ctrl: EditorController }) {
     })
   }
 
+  const currentLook = layers.find((l) => l.owner === "look")
+
   return (
     <div className="space-y-3 p-3">
+      <div className="space-y-1.5">
+        <p className="text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">
+          Looks
+        </p>
+        <div className="flex flex-wrap gap-1.5">
+          {LOOKS.map((look) => (
+            <button
+              key={look.name}
+              title={look.blurb}
+              onClick={() =>
+                ctrl.dispatch({
+                  command: "look.apply",
+                  args: { name: look.name },
+                })
+              }
+              className="rounded-md border px-2 py-1 text-[11px] hover:border-primary/60"
+            >
+              {look.emoji} {look.label}
+            </button>
+          ))}
+          {currentLook && (
+            <button
+              onClick={() =>
+                ctrl.dispatch({ command: "look.apply", args: { name: "none" } })
+              }
+              className="rounded-md border border-destructive/40 px-2 py-1 text-[11px] text-destructive"
+            >
+              Clear look
+            </button>
+          )}
+        </div>
+      </div>
+
       <Select value="" onValueChange={add}>
         <SelectTrigger className="h-8 w-full text-sm">
           <SelectValue placeholder="Add an effect…" />

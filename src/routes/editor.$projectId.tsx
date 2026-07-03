@@ -8,6 +8,7 @@ import type { RendererCapabilities } from "@/engine/backend"
 import { EditorShell } from "@/components/editor/EditorShell"
 import { UnsupportedGate } from "@/components/editor/UnsupportedGate"
 import { EditorController } from "@/controller"
+import { installAssetResolver, primeAssets } from "@/persistence/assets"
 import { setGlslValidator } from "@/controller/normalize"
 import { detectCapabilities } from "@/engine/backend"
 import { HtmlCanvasBackend } from "@/engine/html-canvas"
@@ -25,6 +26,8 @@ function EditorPage() {
   useEffect(() => {
     const c = detectCapabilities()
     setCaps(c)
+    installAssetResolver()
+    void primeAssets()
     if (c.liveCanvas) {
       const b = new HtmlCanvasBackend()
       setBackend(b)

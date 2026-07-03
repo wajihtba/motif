@@ -4,7 +4,6 @@
 
 import { useEffect, useState } from "react"
 import type { EditorController } from "@/controller"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { ButtonGroup } from "@/components/ui/button-group"
 import { Input } from "@/components/ui/input"
@@ -16,7 +15,16 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import { ExportMenu } from "./ExportMenu"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { FORMATS, formatByKey } from "@/content/formats"
 import { useEditorState } from "@/hooks/use-document-store"
+import { BrandKitDialog } from "./BrandKitDialog"
 
 export interface TopBarViewport {
   zoom: number
@@ -85,10 +93,28 @@ export function TopBar({
             {state.document.name}
           </button>
         )}
-        <Badge variant="outline" className="text-xs text-muted-foreground">
-          {state.document.scene.baseWidth}×{state.document.scene.baseHeight} ·{" "}
-          {state.document.scene.format}
-        </Badge>
+        <Select
+          value={state.document.scene.format}
+          onValueChange={(key) => {
+            const f = formatByKey(key)
+            ctrl.dispatch({
+              command: "scene.setFormat",
+              args: { format: f.key, width: f.w, height: f.h },
+            })
+          }}
+        >
+          <SelectTrigger className="h-7 w-44 text-xs">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {FORMATS.map((f) => (
+              <SelectItem key={f.key} value={f.key}>
+                {f.label} · {f.w}×{f.h}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <BrandKitDialog ctrl={ctrl} />
 
         <div className="flex-1" />
 

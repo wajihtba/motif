@@ -206,6 +206,10 @@ export interface Document {
   /** The canonical scene all format variants derive from. */
   scene: Scene
   formats: FormatVariant[]
+  /** Brand identity (M6): compiled into theme tokens + the agent context.
+   *  Conceptually project-level; it rides the document until M7's project
+   *  persistence lifts it. */
+  brandKit?: BrandKit
 }
 
 /** Brand identity compiled into scene theme tokens + the agent system prompt. */

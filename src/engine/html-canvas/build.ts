@@ -7,6 +7,16 @@
 import type { SceneNode } from "../../scene/types"
 import { compileLayout } from "../../scene/layout"
 
+/** asset:<id> → displayable URL. Installed by the persistence layer; the
+ *  engine stays storage-agnostic. Unresolved asset: URLs render nothing. */
+type AssetResolver = (url: string) => string | null
+let assetResolver: AssetResolver = (url) =>
+  url.startsWith("asset:") ? null : url
+
+export function setAssetResolver(fn: AssetResolver): void {
+  assetResolver = fn
+}
+
 export interface BuildOptions {
   /** Populated with node id → element for every node in the subtree. */
   index?: Map<string, HTMLElement>
@@ -60,7 +70,8 @@ export function buildNodeEl(
     if (opts.trackImage) {
       opts.trackImage(img, () => {})
     }
-    img.src = node.image
+    const resolved = assetResolver(node.image)
+    if (resolved) img.src = resolved
     el.appendChild(img)
   }
 

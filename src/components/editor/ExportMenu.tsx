@@ -21,7 +21,9 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Progress } from "@/components/ui/progress"
+import { FORMATS } from "@/content/formats"
 import { exportImage, exportVideo } from "@/engine/export"
+import { resolveForFormat } from "@/scene/variants"
 import { useEditorState } from "@/hooks/use-document-store"
 
 export function ExportMenu({ ctrl }: { ctrl: EditorController }) {
@@ -44,6 +46,24 @@ export function ExportMenu({ ctrl }: { ctrl: EditorController }) {
     try {
       const blob = await exportImage(scene(), type)
       download(blob, `${name}.${type === "jpeg" ? "jpg" : "png"}`)
+    } catch (e) {
+      alertError(e)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  // One canonical scene → every platform format, via sparse variant overrides.
+  const allFormats = async () => {
+    if (busy) return
+    setBusy(true)
+    try {
+      const doc = ctrl.store.state.document
+      for (const f of FORMATS) {
+        const derived = resolveForFormat(doc, f.key)
+        const blob = await exportImage(derived, "png")
+        download(blob, `${name}-${f.key}.png`)
+      }
     } catch (e) {
       alertError(e)
     } finally {
@@ -105,6 +125,9 @@ export function ExportMenu({ ctrl }: { ctrl: EditorController }) {
           </DropdownMenuItem>
           <DropdownMenuItem onClick={() => void startVideo()}>
             Video · {scene().timeline.duration}s mp4
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => void allFormats()}>
+            All formats · {FORMATS.length} PNGs
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>

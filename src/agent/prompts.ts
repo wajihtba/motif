@@ -47,10 +47,12 @@ export function contextBlock(parts: {
   summary: string
   selection: string[]
   userEdits: string[]
+  brand?: string
 }): string {
   return [
     "<context>",
     parts.summary,
+    parts.brand ? `brand kit: ${parts.brand}` : null,
     parts.selection.length
       ? `user selection: ${parts.selection.join(", ")}`
       : "user selection: none",
@@ -58,5 +60,7 @@ export function contextBlock(parts: {
       ? `user edits since your last turn: ${parts.userEdits.join("; ")}`
       : "user edits since your last turn: none",
     "</context>",
-  ].join("\n")
+  ]
+    .filter((l): l is string => l !== null)
+    .join("\n")
 }
