@@ -122,6 +122,21 @@ export function CanvasStage({
             onClose={() => setEditingId(null)}
           />
         )}
+        {/* empty scene: point at the chat (the product's front door) */}
+        {!scene.root.children?.length && (
+          <div
+            className="pointer-events-none absolute inset-0 flex items-center justify-center"
+            style={{ width: scene.baseWidth, height: scene.baseHeight }}
+          >
+            <div className="text-center" style={{ fontSize: 28 }}>
+              <div className="text-muted-foreground">A blank canvas.</div>
+              <div className="mt-2 text-muted-foreground/60">
+                Describe your visual in the chat — or double-click to start
+                editing once it exists.
+              </div>
+            </div>
+          </div>
+        )}
         {/* format label under the artboard */}
         <div
           className="absolute text-muted-foreground select-none"

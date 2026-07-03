@@ -133,6 +133,19 @@
   }
 }
 
+/* Reduced motion: UI transitions/animations collapse to instant. The engine
+   separately freezes ambient effect motion (backend honours the same query);
+   explicit timeline playback stays user-initiated. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
 /* The canvas well — one step darker than panels, subtle dot grid, so the
    user's (usually bright) artboard pops. */
 .canvas-well {

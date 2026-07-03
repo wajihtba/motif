@@ -143,11 +143,12 @@ export class HtmlCanvasBackend implements RendererBackend {
   }
 
   private updateContinuous(): void {
-    this.loop.setContinuous(
-      this.externalContinuous ||
-        this.playing ||
-        Boolean(this.compositor.plan?.animated)
-    )
+    // Ambient effect motion honours prefers-reduced-motion (frames render at
+    // the static playhead). Explicit playback (play()) is user-initiated and
+    // always runs.
+    const ambient =
+      Boolean(this.compositor.plan?.animated) && !prefersReducedMotion()
+    this.loop.setContinuous(this.externalContinuous || this.playing || ambient)
   }
 
   // --- timeline playback (the animate preview + timeline UI drive these) ----
@@ -486,6 +487,13 @@ export class HtmlCanvasBackend implements RendererBackend {
 
 function nextFrame(): Promise<void> {
   return new Promise((r) => requestAnimationFrame(() => r()))
+}
+
+function prefersReducedMotion(): boolean {
+  return (
+    typeof matchMedia === "function" &&
+    matchMedia("(prefers-reduced-motion: reduce)").matches
+  )
 }
 
 function setsEqual(a: Set<string>, b: Set<string>): boolean {

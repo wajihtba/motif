@@ -1,0 +1,27 @@
+# CI — eval lanes 1 & 2 (docs/plan/03-agent-first.md §7): unit tests (the
+# normalize-gate tables, command goldens, partial-JSON fuzz) and the simulated
+# agent lane (recorded tool-call transcripts replayed against dispatch), plus
+# lint / types / formatting. Pixel-exact render checks stay local-only: CI
+# Chrome lacks the canvas-draw-element flag. Lane 3 (live model) runs manually
+# via `bun scripts/eval-live.ts` with an ANTHROPIC_API_KEY.
+
+name: ci
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+      - run: bun run lint
+      - run: bun run typecheck
+      - run: bun run check
+      - run: bun run test

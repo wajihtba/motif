@@ -4,6 +4,7 @@
 // notice (WebM when H.264 encode is unavailable).
 
 import { useRef, useState } from "react"
+import { toast } from "sonner"
 import type { ChatStore } from "@/agent/chat"
 import type { EditorController } from "@/controller"
 import { Button } from "@/components/ui/button"
@@ -75,6 +76,7 @@ export function ExportMenu({
         const blob = await exportImage(derived, "png")
         download(blob, `${name}-${f.key}.png`)
       }
+      toast.success(`Exported ${FORMATS.length} formats`)
     } catch (e) {
       alertError(e)
     } finally {
@@ -229,4 +231,5 @@ function download(blob: Blob, filename: string): void {
 
 function alertError(e: unknown): void {
   console.error("[export]", e)
+  toast.error(e instanceof Error ? e.message : "Export failed")
 }

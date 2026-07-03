@@ -28,6 +28,7 @@ export function CommandPalette({
   backend,
   viewport,
   openHelp,
+  toggleBudget,
 }: {
   open: boolean
   onOpenChange: (o: boolean) => void
@@ -35,6 +36,7 @@ export function CommandPalette({
   backend: HtmlCanvasBackend
   viewport: TopBarViewport | null
   openHelp: () => void
+  toggleBudget?: () => void
 }) {
   const state = useEditorState(ctrl)
   const selection = state.selection
@@ -115,6 +117,14 @@ export function CommandPalette({
               Play / pause timeline
               <CommandShortcut>Space</CommandShortcut>
             </CommandItem>
+            {toggleBudget && (
+              <CommandItem
+                value="performance overlay fps budget"
+                onSelect={run(toggleBudget)}
+              >
+                Toggle performance overlay
+              </CommandItem>
+            )}
           </CommandGroup>
 
           <CommandSeparator />

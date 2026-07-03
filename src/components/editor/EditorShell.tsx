@@ -3,6 +3,7 @@
 // surface edit the same document through the same command seam.
 
 import { useEffect, useState } from "react"
+import { toast } from "sonner"
 import type { AgentSession } from "@/agent/loop"
 import type { ChatStore } from "@/agent/chat"
 import type { EditorController } from "@/controller"
@@ -11,6 +12,7 @@ import type { Autosaver } from "@/persistence/autosave"
 import type { TopBarViewport } from "./TopBar"
 import { ChatRail } from "@/components/chat/ChatRail"
 import { InspectorTabs } from "@/components/panels/InspectorTabs"
+import { BudgetOverlay } from "./BudgetOverlay"
 import { CanvasStage } from "./CanvasStage"
 import { CommandPalette } from "./CommandPalette"
 import { HelpDialog } from "./HelpDialog"
@@ -35,6 +37,17 @@ export function EditorShell({
   const [viewport, setViewport] = useState<TopBarViewport | null>(null)
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [helpOpen, setHelpOpen] = useState(false)
+  const [budgetOpen, setBudgetOpen] = useState(false)
+
+  // Dev/eval hook: lane-3 live evals reach the controller + backend directly.
+  useEffect(() => {
+    if (!import.meta.env.DEV) return
+    const w = window as unknown as Record<string, unknown>
+    w.__motif = { ctrl, backend, chat, session }
+    return () => {
+      delete w.__motif
+    }
+  }, [ctrl, backend, chat, session])
 
   // App-level shortcuts: ⌘K palette, ⌘/ help, ⌘D duplicate, ⌘S save-now.
   useEffect(() => {
@@ -86,6 +99,7 @@ export function EditorShell({
         "assistant",
         `Disabled ${layerIds.length} custom shader${layerIds.length === 1 ? "" : "s"} — the frame budget was exceeded twice.`
       )
+      toast.warning("Custom shaders disabled — frame budget exceeded")
     }
     return () => {
       backend.onBudgetOverrun = null
@@ -103,7 +117,10 @@ export function EditorShell({
       />
       <div className="flex min-h-0 flex-1">
         <ChatRail ctrl={ctrl} chat={chat} session={session} />
-        <CanvasStage ctrl={ctrl} backend={backend} onViewport={setViewport} />
+        <div className="relative flex min-w-0 flex-1">
+          <CanvasStage ctrl={ctrl} backend={backend} onViewport={setViewport} />
+          {budgetOpen && <BudgetOverlay backend={backend} />}
+        </div>
         <InspectorTabs ctrl={ctrl} />
       </div>
       <Timeline ctrl={ctrl} backend={backend} />
@@ -114,6 +131,7 @@ export function EditorShell({
         backend={backend}
         viewport={viewport}
         openHelp={() => setHelpOpen(true)}
+        toggleBudget={() => setBudgetOpen((o) => !o)}
       />
       <HelpDialog open={helpOpen} onOpenChange={setHelpOpen} />
     </div>
