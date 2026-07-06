@@ -105,8 +105,11 @@ export class Compositor {
   }
 
   /** Draw the full frame at time t. Deterministic: same t, same content →
-   *  same pixels (given settled paint records). */
-  compose(tSec: number): void {
+   *  same pixels (given settled paint records). `fxTSec` is the clock effect
+   *  layers see (uniforms/filters) — it defaults to t, but the ambient loop
+   *  passes the rAF clock here so animated effects keep moving while the
+   *  timeline playhead stays parked. */
+  compose(tSec: number, fxTSec: number = tSec): void {
     const { ctx, draw } = this
     if (!draw) return
     const W = this.canvas.width
@@ -141,19 +144,19 @@ export class Compositor {
       }
       const s = this.sampler?.(tSec, unit.id) ?? IDENTITY_SAMPLE
       if (s.opacity <= 0) continue
-      this.compositeUnit(unit, s, tSec)
+      this.compositeUnit(unit, s, fxTSec)
     }
 
     // --- effect post passes ---------------------------------------------------
-    this.applyCanvasChain(tSec)
-    this.applySceneChain(tSec)
-    this.applyCanvasFilters(tSec)
+    this.applyCanvasChain(fxTSec)
+    this.applySceneChain(fxTSec)
+    this.applyCanvasFilters(fxTSec)
 
     // --- protected units, crisp above the effected frame ----------------------
     for (const unit of deferred) {
       const s = this.sampler?.(tSec, unit.id) ?? IDENTITY_SAMPLE
       if (s.opacity <= 0) continue
-      this.compositeUnit(unit, s, tSec)
+      this.compositeUnit(unit, s, fxTSec)
     }
   }
 

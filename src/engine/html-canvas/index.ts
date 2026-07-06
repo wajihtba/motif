@@ -55,6 +55,7 @@ export class HtmlCanvasBackend implements RendererBackend {
   private compiled: CompiledUnits | null = null
   private dpr = 1
   private pendingT = 0
+  private pendingFxT = 0
   private disposed = false
   private externalContinuous = false
   private overruns = 0
@@ -92,14 +93,21 @@ export class HtmlCanvasBackend implements RendererBackend {
         this.playheadT = (t - this.playAnchor) % Math.max(duration, 0.001)
       }
       this.pendingT = this.playheadT
+      // Effect-layer clock: explicit playback pins effects to the playhead
+      // (preview must match export); the ambient continuous loop (animated
+      // effects, timeline parked) feeds them the rAF clock so they keep
+      // moving. Demand-driven repaints (reduced motion, static scenes) stay
+      // on the playhead — deterministic frames.
+      this.pendingFxT =
+        !this.playing && this.loop.isContinuous ? t : this.playheadT
       if (this.canvas.requestPaint) this.canvas.requestPaint()
-      else this.compositor.compose(this.pendingT)
+      else this.compositor.compose(this.pendingT, this.pendingFxT)
     })
     if ("onpaint" in this.canvas) {
       this.canvas.onpaint = () => {
         if (this.disposed) return
         const started = performance.now()
-        this.compositor.compose(this.pendingT)
+        this.compositor.compose(this.pendingT, this.pendingFxT)
         this.watchBudget(performance.now() - started)
       }
     }
