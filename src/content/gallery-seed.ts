@@ -9,10 +9,33 @@
 // touched.
 
 import type { ProjectRecord } from "../persistence/projects"
+import { getAssetBlob, putAsset } from "../persistence/assets"
 import { getProject, putProject } from "../persistence/projects"
-import { GALLERY, buildGalleryDocument } from "./gallery"
+import { GALLERY, GALLERY_IMAGE_SLUGS, buildGalleryDocument } from "./gallery"
 
 const LEDGER_KEY = "motif:gallery-seeded"
+
+/** Seed the bundled gallery photos (/public/gallery/<slug>.jpg) into the asset
+ *  store as `gal-<slug>` blobs, so the scenes' same-origin `asset:` image refs
+ *  resolve in both the home previews and the editor. Idempotent: skips any
+ *  asset already present. Best-effort — a failed fetch leaves that asset for a
+ *  later retry and never blocks seeding. Call before primeAssets() on any
+ *  surface that renders gallery scenes. */
+export async function ensureGalleryAssets(): Promise<void> {
+  await Promise.all(
+    GALLERY_IMAGE_SLUGS.map(async (slug) => {
+      const id = `gal-${slug}`
+      try {
+        if (await getAssetBlob(`asset:${id}`)) return
+        const res = await fetch(`/gallery/${slug}.jpg`)
+        if (!res.ok) return
+        await putAsset(await res.blob(), id)
+      } catch {
+        // Offline / quota — retry on a later mount.
+      }
+    })
+  )
+}
 
 function readLedger(): Set<string> {
   try {

@@ -11,6 +11,7 @@ import { EditorShell } from "@/components/editor/EditorShell"
 import { UnsupportedGate } from "@/components/editor/UnsupportedGate"
 import { EditorController } from "@/controller"
 import { setGlslValidator } from "@/controller/normalize"
+import { ensureGalleryAssets } from "@/content/gallery-seed"
 import { detectCapabilities } from "@/engine/backend"
 import { HtmlCanvasBackend } from "@/engine/html-canvas"
 import { installAssetResolver, primeAssets } from "@/persistence/assets"
@@ -45,6 +46,9 @@ function EditorPage() {
     const life = { disposed: false }
     let s: Autosaver | null = null
     void (async () => {
+      // A deep-link straight into a gallery project may never have hit the home
+      // seeder, so make sure its bundled photos are in the asset store first.
+      await ensureGalleryAssets()
       await primeAssets()
       const record = await loadOrCreateProject(projectId)
       if (life.disposed) return

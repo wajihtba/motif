@@ -64,6 +64,60 @@ function shape(layout: Layout, css: Record<string, string>): SceneNode {
   return node({ role: "image", layout, css, allowOverlap: true })
 }
 
+// --- photos -------------------------------------------------------------------
+// Real photographs ship in /public/gallery and are seeded into the per-project
+// asset store on first visit (see GALLERY_IMAGE_SLUGS + gallery-seed.ts), so
+// scenes reference them as same-origin `asset:` URLs — sanitizer-safe, export-
+// clean, and survived by the normalize gate when the project is edited.
+
+/** `asset:` URL for a bundled gallery photo slug. */
+function img(slug: GalleryImageSlug): string {
+  return `asset:gal-${slug}`
+}
+
+/** A photographic fill (product shot, hero, panel). object-fit: cover, with
+ *  overflow clipped so the photo respects the box's border radius. Decor role
+ *  so text layered over it is never a lint target. */
+function photo(
+  slug: GalleryImageSlug,
+  layout: Layout,
+  css: Record<string, string> = {},
+  id?: string
+): SceneNode {
+  return node({
+    id,
+    role: "image",
+    image: img(slug),
+    imageFit: "cover",
+    layout,
+    css: { overflow: "hidden", ...css },
+    allowOverlap: true,
+  })
+}
+
+/** Every bundled photo slug → /public/gallery/<slug>.jpg, seeded to asset id
+ *  `gal-<slug>`. The seeder walks this list; keep it in sync with img() usage. */
+export const GALLERY_IMAGE_SLUGS = [
+  "fashion",
+  "earbuds",
+  "serum",
+  "saas",
+  "feature",
+  "brunch",
+  "coffee",
+  "gym",
+  "villa",
+  "santorini",
+  "crowd",
+  "podcast",
+  "blackfriday",
+  "phone",
+  "webinar",
+  "crypto",
+  "gaming",
+] as const
+export type GalleryImageSlug = (typeof GALLERY_IMAGE_SLUGS)[number]
+
 /** A text element with sensible type defaults. */
 function txt(
   role: SceneNode["role"],
@@ -214,12 +268,10 @@ export const GALLERY: GalleryExample[] = [
         background:
           "radial-gradient(120% 100% at 50% 0%, #17130c 0%, #050505 65%)",
       }),
-      shape(abs("center", 0, -0.02, 0.52, 0.5), {
-        borderRadius: "50%",
+      photo("fashion", FULL),
+      shape(FULL, {
         background:
-          "conic-gradient(from 210deg, #3a2f19, #7a6329, #f2e3bf, #6b551f, #2a2211)",
-        filter: "blur(2px)",
-        opacity: "0.55",
+          "linear-gradient(180deg, rgba(5,5,5,0.74) 0%, rgba(5,5,5,0.42) 44%, rgba(5,5,5,0.82) 100%)",
       }),
       shape(abs("center", 0, -0.02, 0.42, 0.42), {
         borderRadius: "50%",
@@ -321,8 +373,11 @@ export const GALLERY: GalleryExample[] = [
       node({
         id: "product",
         role: "image",
+        image: img("earbuds"),
+        imageFit: "cover",
         layout: abs("center-right", -0.14, 0.0, 0.34, 0.66),
         css: {
+          overflow: "hidden",
           borderRadius: "48px",
           background:
             "linear-gradient(150deg, #1b2b4d 0%, #0d1830 60%), radial-gradient(circle at 30% 25%, rgba(120,200,255,0.5), rgba(0,0,0,0) 50%)",
@@ -423,8 +478,11 @@ export const GALLERY: GalleryExample[] = [
       node({
         id: "bottle",
         role: "image",
+        image: img("serum"),
+        imageFit: "cover",
         layout: abs("center", 0, 0.06, 0.28, 0.4),
         css: {
+          overflow: "hidden",
           borderRadius: "40px 40px 46px 46px",
           background:
             "linear-gradient(150deg, rgba(255,255,255,0.9), #ffd0e0 70%)",
@@ -517,6 +575,11 @@ export const GALLERY: GalleryExample[] = [
         background:
           "radial-gradient(120% 120% at 15% 10%, #1a1740 0%, #0a0a1a 60%)",
       }),
+      photo("saas", FULL),
+      shape(FULL, {
+        background:
+          "linear-gradient(90deg, rgba(10,10,26,0.93) 0%, rgba(10,10,26,0.62) 52%, rgba(16,14,44,0.4) 100%)",
+      }),
       shape(abs("bottom-right", 0.05, 0.08, 0.5, 0.7), {
         borderRadius: "50%",
         background:
@@ -608,9 +671,10 @@ export const GALLERY: GalleryExample[] = [
     ],
     build: () => [
       bg({ background: "#f4f2ec" }),
-      shape(abs("center-right", -0.06, 0, 0.28, 0.62), {
+      photo("feature", abs("center-right", -0.06, 0, 0.28, 0.62), {
         borderRadius: "24px",
         background: "linear-gradient(150deg, #141210, #3a352d)",
+        boxShadow: "0 40px 90px rgba(20,18,16,0.32)",
       }),
       shape(abs("center-right", -0.1, 0.12, 0.14, 0.14), {
         borderRadius: "50%",
@@ -683,6 +747,11 @@ export const GALLERY: GalleryExample[] = [
     ],
     build: () => [
       bg({ background: "linear-gradient(160deg, #1f3a2e 0%, #14261e 100%)" }),
+      photo("brunch", FULL),
+      shape(FULL, {
+        background:
+          "radial-gradient(120% 100% at 50% 42%, rgba(20,38,30,0.5) 0%, rgba(12,22,17,0.87) 72%)",
+      }),
       shape(abs("center", 0, 0, 0.78, 0.78), {
         borderRadius: "50%",
         border: "2px solid rgba(232,176,75,0.4)",
@@ -786,8 +855,11 @@ export const GALLERY: GalleryExample[] = [
       node({
         id: "cup",
         role: "image",
-        layout: abs("center", 0, 0.02, 0.4, 0.3),
+        image: img("coffee"),
+        imageFit: "cover",
+        layout: abs("center", 0, 0.02, 0.4, 0.34),
         css: {
+          overflow: "hidden",
           borderRadius: "36px",
           background: "linear-gradient(160deg, #6b4326, #3a2414)",
           boxShadow: "0 40px 90px rgba(0,0,0,0.5)",
@@ -874,6 +946,11 @@ export const GALLERY: GalleryExample[] = [
         background:
           "linear-gradient(180deg, #1a0505 0%, #300a0a 55%, #120303 100%)",
       }),
+      photo("gym", FULL),
+      shape(FULL, {
+        background:
+          "linear-gradient(180deg, rgba(20,4,4,0.8) 0%, rgba(40,9,9,0.5) 46%, rgba(15,3,3,0.86) 100%)",
+      }),
       shape(abs("top-center", 0, -0.1, 0.9, 0.5), {
         borderRadius: "50%",
         background:
@@ -959,10 +1036,11 @@ export const GALLERY: GalleryExample[] = [
     ],
     build: () => [
       bg({ background: "linear-gradient(135deg, #0c1a17 0%, #16302a 100%)" }),
-      shape(abs("center-right", -0.05, 0, 0.4, 0.78), {
+      photo("villa", abs("center-right", -0.05, 0, 0.4, 0.78), {
         borderRadius: "20px",
         background: "linear-gradient(160deg, #2b463d, #16302a)",
         border: "1px solid rgba(203,180,130,0.3)",
+        boxShadow: "0 40px 90px rgba(0,0,0,0.4)",
       }),
       txt(
         "eyebrow",
@@ -1053,6 +1131,11 @@ export const GALLERY: GalleryExample[] = [
       bg({
         background:
           "linear-gradient(180deg, #ff9e6d 0%, #ff6b8b 45%, #7a4bd0 100%)",
+      }),
+      photo("santorini", FULL),
+      shape(FULL, {
+        background:
+          "linear-gradient(180deg, rgba(70,35,100,0.55) 0%, rgba(70,35,100,0.1) 34%, rgba(70,35,100,0) 56%)",
       }),
       node({
         id: "sun",
@@ -1151,6 +1234,11 @@ export const GALLERY: GalleryExample[] = [
       bg({
         background:
           "radial-gradient(120% 90% at 50% 30%, #2a0a52 0%, #08010f 70%)",
+      }),
+      photo("crowd", FULL),
+      shape(FULL, {
+        background:
+          "radial-gradient(100% 80% at 50% 44%, rgba(8,1,15,0.4) 0%, rgba(8,1,15,0.83) 72%)",
       }),
       shape(abs("center", -0.16, -0.05, 0.5, 0.5), {
         borderRadius: "50%",
@@ -1257,12 +1345,16 @@ export const GALLERY: GalleryExample[] = [
       node({
         id: "disc",
         role: "image",
+        image: img("podcast"),
+        imageFit: "cover",
         layout: abs("top-center", 0, 0.12, 0.4, 0.4),
         css: {
+          overflow: "hidden",
           borderRadius: "50%",
           background:
             "conic-gradient(from 0deg, #3df0e0, #ffe86b, #ff6fae, #3df0e0)",
           boxShadow: "0 30px 80px rgba(0,0,0,0.4)",
+          border: "3px solid rgba(255,255,255,0.25)",
         },
         allowOverlap: true,
       }),
@@ -1344,6 +1436,11 @@ export const GALLERY: GalleryExample[] = [
       bg({
         background:
           "radial-gradient(120% 100% at 50% 100%, #3a0d00 0%, #0a0300 70%)",
+      }),
+      photo("blackfriday", FULL),
+      shape(FULL, {
+        background:
+          "radial-gradient(120% 100% at 50% 100%, rgba(58,13,0,0.82) 0%, rgba(10,3,0,0.93) 68%)",
       }),
       txt(
         "eyebrow",
@@ -1443,8 +1540,11 @@ export const GALLERY: GalleryExample[] = [
       node({
         id: "phone",
         role: "image",
+        image: img("phone"),
+        imageFit: "cover",
         layout: abs("center-right", -0.14, 0.0, 0.24, 0.82),
         css: {
+          overflow: "hidden",
           borderRadius: "54px",
           background: "linear-gradient(170deg, #123528, #061a12)",
           border: "3px solid rgba(142,240,196,0.4)",
@@ -1520,6 +1620,11 @@ export const GALLERY: GalleryExample[] = [
     ],
     build: () => [
       bg({ background: "linear-gradient(120deg, #071226 0%, #0d1f45 100%)" }),
+      photo("webinar", FULL),
+      shape(FULL, {
+        background:
+          "linear-gradient(90deg, rgba(3,10,22,0.93) 0%, rgba(5,15,32,0.6) 55%, rgba(7,22,50,0.34) 100%)",
+      }),
       shape(abs("top-right", 0.06, -0.08, 0.5, 0.6), {
         borderRadius: "50%",
         background:
@@ -1620,9 +1725,12 @@ export const GALLERY: GalleryExample[] = [
       node({
         id: "coin",
         role: "image",
-        layout: abs("center-right", -0.12, 0, 0.32, 0.58),
+        image: img("crypto"),
+        imageFit: "cover",
+        layout: abs("center-right", -0.12, 0, 0.26, 0.86),
         css: {
-          borderRadius: "50%",
+          overflow: "hidden",
+          borderRadius: "44px",
           background:
             "conic-gradient(from 220deg, #6b7280, #e5e7eb, #9ca3af, #f9fafb, #4b5563)",
           boxShadow: "0 50px 110px rgba(0,0,0,0.6)",
@@ -1701,9 +1809,10 @@ export const GALLERY: GalleryExample[] = [
         background:
           "radial-gradient(120% 120% at 20% 0%, #2a0836 0%, #05010a 70%)",
       }),
-      shape(abs("center-right", -0.04, 0, 0.42, 1.0), {
+      photo("gaming", abs("center-right", 0, 0, 0.44, 1.0)),
+      shape(abs("center-right", 0, 0, 0.44, 1.0), {
         background:
-          "linear-gradient(90deg, rgba(32,227,255,0) 0%, rgba(32,227,255,0.28) 100%)",
+          "linear-gradient(90deg, rgba(5,1,10,0.98) 0%, rgba(5,1,10,0.34) 34%, rgba(5,1,10,0) 62%), linear-gradient(90deg, rgba(32,227,255,0) 55%, rgba(32,227,255,0.26) 100%)",
       }),
       shape(abs("center-left", 0.02, 0.2, 0.5, 0.5), {
         borderRadius: "50%",

@@ -7,7 +7,8 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router"
 import type { ProjectRecord } from "@/persistence/projects"
 import { ScenePreview } from "@/components/ScenePreview"
 import { Button } from "@/components/ui/button"
-import { seedGallery } from "@/content/gallery-seed"
+import { ensureGalleryAssets, seedGallery } from "@/content/gallery-seed"
+import { installAssetResolver, primeAssets } from "@/persistence/assets"
 import {
   Dialog,
   DialogContent,
@@ -45,9 +46,19 @@ function HomePage() {
   const refresh = () => {
     void listProjects().then(setProjects)
   }
-  // First-visit: seed the curated example gallery, then load the grid.
+  // First-visit: seed the curated example gallery + its bundled photos, warm
+  // the asset resolver, then load the grid. Priming before the first refresh
+  // means the card previews paint with their `asset:` images already resolvable
+  // (otherwise the ScenePreview builds before object URLs exist and paints no
+  // photos until a later render).
   useEffect(() => {
-    void seedGallery().then(refresh)
+    installAssetResolver()
+    void (async () => {
+      await seedGallery()
+      await ensureGalleryAssets()
+      await primeAssets()
+      refresh()
+    })()
   }, [])
 
   const open = (id: string) => {
