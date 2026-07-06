@@ -15,16 +15,20 @@ import type { Handle } from "@/engine/resize"
 import { CURSOR, HANDLES } from "@/engine/resize"
 import { findNode } from "@/scene/model"
 import { Viewport } from "@/engine/viewport"
+import type { HoverStore } from "@/hooks/use-hover"
 import { useEditorState } from "@/hooks/use-document-store"
+import { useHoverId } from "@/hooks/use-hover"
 import { InlineTextEditor } from "./InlineTextEditor"
 
 export function CanvasStage({
   ctrl,
   backend,
+  hover,
   onViewport,
 }: {
   ctrl: EditorController
   backend: HtmlCanvasBackend
+  hover: HoverStore
   onViewport: (vp: TopBarViewport) => void
 }) {
   const vpRef = useRef<HTMLDivElement>(null)
@@ -34,7 +38,6 @@ export function CanvasStage({
   const [zoom, setZoom] = useState(1)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [guides, setGuides] = useState<SnapGuide[]>([])
-  const [hoverId, setHoverId] = useState<string | null>(null)
   const state = useEditorState(ctrl)
   const scene = state.document.scene
 
@@ -68,7 +71,7 @@ export function CanvasStage({
       endGesture: () => ctrl.endGesture(),
       onEditText: (node) => setEditingId(node.id),
       onGuides: setGuides,
-      onHover: (node) => setHoverId(node?.id ?? null),
+      onHover: (node) => hover.setHover(node?.id ?? null),
     })
     interactionRef.current = interaction
     viewport.fitToView()
@@ -127,7 +130,7 @@ export function CanvasStage({
         <HoverOverlay
           backend={backend}
           zoom={zoom}
-          hoverId={hoverId}
+          hover={hover}
           selection={state.selection}
         />
         <SelectionOverlay
@@ -185,14 +188,15 @@ export function CanvasStage({
 function HoverOverlay({
   backend,
   zoom,
-  hoverId,
+  hover,
   selection,
 }: {
   backend: HtmlCanvasBackend
   zoom: number
-  hoverId: string | null
+  hover: HoverStore
   selection: string[]
 }) {
+  const hoverId = useHoverId(hover)
   if (!hoverId || selection.includes(hoverId)) return null
   const box = backend.measure(hoverId)
   if (!box) return null

@@ -1,0 +1,79 @@
+/* Motif skin for vanilla-jsoneditor. Loaded AFTER jse-theme-dark.css, scoped to
+ * our wrapper (.jse-theme-dark on CodePanel), so it overrides the base dark
+ * theme by source order at equal specificity. We remap the editor's chrome to
+ * the app's design tokens — lime `--primary`, the neutral dark surfaces, the
+ * shared radius and Montserrat — while leaving the conventional JSON syntax
+ * colors (keys/strings/numbers) alone so the code stays readable. */
+
+.jse-theme-dark {
+  /* accent: blue → the app's lime primary (menu bar + primary buttons) */
+  --jse-theme-color: var(--primary);
+  --jse-theme-color-highlight: color-mix(in oklch, var(--primary), white 14%);
+  --jse-menu-color: var(--primary-foreground);
+  --jse-button-primary-background: var(--primary);
+  --jse-button-primary-background-highlight: color-mix(
+    in oklch,
+    var(--primary),
+    white 14%
+  );
+  --jse-button-primary-color: var(--primary-foreground);
+
+  /* surfaces: match the app's dark neutrals instead of the theme's greys */
+  --jse-background-color: var(--background);
+  --jse-contents-background-color: var(--background);
+  --jse-panel-background: var(--card);
+  --jse-navigation-bar-background: var(--card);
+  --jse-context-menu-background: var(--popover);
+  --jse-context-menu-color: var(--popover-foreground);
+  --jse-modal-background: var(--popover);
+  --jse-tooltip-background: var(--popover);
+  --jse-tooltip-color: var(--popover-foreground);
+  --jse-input-background: var(--muted);
+  --jse-input-background-readonly: transparent;
+  --jse-text-color: var(--foreground);
+  --jse-text-color-inverse: var(--muted-foreground);
+  --jse-delimiter-color: var(--muted-foreground);
+
+  /* borders + radius: the app's hairline border and shared corner radius */
+  --jse-main-border: 1px solid var(--border);
+  --jse-panel-border: var(--border);
+  --jse-input-border: var(--input);
+  --jse-input-radius: var(--radius-sm);
+
+  /* typography */
+  --jse-font-family: var(--font-sans);
+  --jse-font-size: 13px;
+
+  /* interaction: neutral hover, lime-tinted selection */
+  --jse-hover-background-color: color-mix(
+    in oklch,
+    var(--muted),
+    transparent 40%
+  );
+  --jse-active-line-background-color: var(--muted);
+  --jse-selection-background-color: color-mix(
+    in oklch,
+    var(--primary) 24%,
+    transparent
+  );
+  --jse-selection-background-inactive-color: color-mix(
+    in oklch,
+    var(--primary) 12%,
+    transparent
+  );
+}
+
+/* Round the primary/secondary buttons and mode-toggle to the app radius (the
+ * base theme leaves them square). */
+.jse-theme-dark .jse-button,
+.jse-theme-dark .jse-group-button {
+  border-radius: var(--radius-sm);
+}
+.jse-theme-dark .jse-group-button:first-child {
+  border-top-left-radius: var(--radius-sm);
+  border-bottom-left-radius: var(--radius-sm);
+}
+.jse-theme-dark .jse-group-button:last-child {
+  border-top-right-radius: var(--radius-sm);
+  border-bottom-right-radius: var(--radius-sm);
+}

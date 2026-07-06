@@ -10,12 +10,14 @@ import type { EditorController } from "@/controller"
 import type { HtmlCanvasBackend } from "@/engine/html-canvas"
 import type { Autosaver } from "@/persistence/autosave"
 import type { TopBarViewport } from "./TopBar"
+import { HoverStore } from "@/hooks/use-hover"
 import { ChatRail } from "@/components/chat/ChatRail"
 import { InspectorTabs } from "@/components/panels/InspectorTabs"
 import { BudgetOverlay } from "./BudgetOverlay"
 import { CanvasStage } from "./CanvasStage"
 import { CommandPalette } from "./CommandPalette"
 import { HelpDialog } from "./HelpDialog"
+import { StructureRail } from "./StructureRail"
 import { Timeline } from "./Timeline"
 import { TopBar } from "./TopBar"
 
@@ -38,6 +40,8 @@ export function EditorShell({
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [helpOpen, setHelpOpen] = useState(false)
   const [budgetOpen, setBudgetOpen] = useState(false)
+  // Ephemeral cross-panel hover, shared by the layers tree and the canvas.
+  const [hover] = useState(() => new HoverStore())
 
   // Dev/eval hook: lane-3 live evals reach the controller + backend directly.
   useEffect(() => {
@@ -117,8 +121,14 @@ export function EditorShell({
       />
       <div className="flex min-h-0 flex-1">
         <ChatRail ctrl={ctrl} chat={chat} session={session} />
+        <StructureRail ctrl={ctrl} hover={hover} />
         <div className="relative flex min-w-0 flex-1">
-          <CanvasStage ctrl={ctrl} backend={backend} onViewport={setViewport} />
+          <CanvasStage
+            ctrl={ctrl}
+            backend={backend}
+            hover={hover}
+            onViewport={setViewport}
+          />
           {budgetOpen && <BudgetOverlay backend={backend} />}
         </div>
         <InspectorTabs ctrl={ctrl} />
