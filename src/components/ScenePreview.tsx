@@ -7,15 +7,32 @@
 //
 // The scene is built at its native pixel size into a fixed "stage", then scaled
 // to object-contain within the card via a ResizeObserver.
+//
+// The optional `tokens` prop splits theme tokens out of the (expensive) DOM
+// build: when provided, token values flow through a cheap setProperty-only
+// effect, so live edits (color-picker drags on /brand) restyle the stage
+// without rebuilding it. Callers that don't pass it get the original
+// everything-from-the-scene behavior.
 
 import { useLayoutEffect, useRef } from "react"
 import type { Scene } from "@/scene/types"
 import { buildNodeEl } from "@/engine/html-canvas/build"
 import { themeVars } from "@/scene/theme"
 
-export function ScenePreview({ scene }: { scene: Scene }) {
+export function ScenePreview({
+  scene,
+  tokens,
+}: {
+  scene: Scene
+  /** Live token overrides — applied without rebuilding the stage DOM. */
+  tokens?: Record<string, string>
+}) {
   const frameRef = useRef<HTMLDivElement>(null)
   const stageRef = useRef<HTMLDivElement>(null)
+  // The build effect reads tokens without depending on them; the tokens
+  // effect below owns re-applying live values onto the existing stage.
+  const tokensRef = useRef(tokens)
+  tokensRef.current = tokens
 
   useLayoutEffect(() => {
     const frame = frameRef.current
@@ -35,6 +52,9 @@ export function ScenePreview({ scene }: { scene: Scene }) {
     for (const [key, value] of Object.entries(themeVars(scene.theme))) {
       stage.style.setProperty(key, value)
     }
+    for (const [key, value] of Object.entries(tokensRef.current ?? {})) {
+      stage.style.setProperty(key, value)
+    }
     stage.appendChild(buildNodeEl(scene.root, {}, true))
 
     // Object-contain scale that tracks the card size.
@@ -50,6 +70,14 @@ export function ScenePreview({ scene }: { scene: Scene }) {
     ro.observe(frame)
     return () => ro.disconnect()
   }, [scene])
+
+  useLayoutEffect(() => {
+    const stage = stageRef.current
+    if (!stage || !tokens) return
+    for (const [key, value] of Object.entries(tokens)) {
+      stage.style.setProperty(key, value)
+    }
+  }, [tokens])
 
   return (
     <div

@@ -15,29 +15,130 @@ export interface TokenDef {
   label: string
   type: TokenType
   group: "color" | "type" | "shape"
+  /** What the token is, in one plain-language line. */
+  description: string
+  /** Where you'll actually see it change on the canvas. */
+  appliesTo: string
 }
 
 export const TOKENS: TokenDef[] = [
-  { key: "--background", label: "Background", type: "color", group: "color" },
-  { key: "--foreground", label: "Foreground", type: "color", group: "color" },
-  { key: "--ink", label: "Ink (text on art)", type: "color", group: "color" },
-  { key: "--primary", label: "Primary", type: "color", group: "color" },
+  {
+    key: "--background",
+    label: "Background",
+    type: "color",
+    group: "color",
+    description: "The canvas backdrop the whole design sits on.",
+    appliesTo: "Scene background, washes, and full-bleed panels.",
+  },
+  {
+    key: "--foreground",
+    label: "Foreground",
+    type: "color",
+    group: "color",
+    description: "Default text color directly on the background.",
+    appliesTo: "Body copy and labels that sit on the backdrop.",
+  },
+  {
+    key: "--ink",
+    label: "Ink (text on art)",
+    type: "color",
+    group: "color",
+    description: "High-contrast text color used over artwork.",
+    appliesTo: "Headlines and labels over cards, photos, and washes.",
+  },
+  {
+    key: "--primary",
+    label: "Primary",
+    type: "color",
+    group: "color",
+    description: "The brand's main action color — the one people remember.",
+    appliesTo: "CTA buttons, price tags, highlights, key shapes.",
+  },
   {
     key: "--primary-foreground",
     label: "On primary",
     type: "color",
     group: "color",
+    description: "Text and icons sitting on primary-colored surfaces.",
+    appliesTo: "The label inside CTA buttons and primary chips.",
   },
-  { key: "--accent", label: "Accent", type: "color", group: "color" },
-  { key: "--accent-2", label: "Accent 2", type: "color", group: "color" },
-  { key: "--muted", label: "Muted", type: "color", group: "color" },
-  { key: "--border", label: "Border", type: "color", group: "color" },
-  { key: "--font-heading", label: "Heading font", type: "font", group: "type" },
-  { key: "--font-body", label: "Body font", type: "font", group: "type" },
-  { key: "--radius", label: "Radius", type: "length", group: "shape" },
-  { key: "--shadow", label: "Shadow", type: "shadow", group: "shape" },
-  { key: "--space", label: "Spacing unit", type: "length", group: "shape" },
+  {
+    key: "--accent",
+    label: "Accent",
+    type: "color",
+    group: "color",
+    description: "Secondary highlight color that supports primary.",
+    appliesTo: "Badges, underlines, secondary buttons, gradient stops.",
+  },
+  {
+    key: "--accent-2",
+    label: "Accent 2",
+    type: "color",
+    group: "color",
+    description: "A second accent for pairings and gradients.",
+    appliesTo: "Gradient partners, duotone shapes, list markers.",
+  },
+  {
+    key: "--muted",
+    label: "Muted",
+    type: "color",
+    group: "color",
+    description: "Low-emphasis gray for quiet text.",
+    appliesTo: "Captions, fine print, secondary copy.",
+  },
+  {
+    key: "--border",
+    label: "Border",
+    type: "color",
+    group: "color",
+    description: "Hairline stroke color for outlines and rules.",
+    appliesTo: "Card outlines, frames, dividers, tick marks.",
+  },
+  {
+    key: "--font-heading",
+    label: "Heading font",
+    type: "font",
+    group: "type",
+    description: "The display typeface with the brand's personality.",
+    appliesTo: "Headlines, price callouts, big numbers.",
+  },
+  {
+    key: "--font-body",
+    label: "Body font",
+    type: "font",
+    group: "type",
+    description: "The workhorse typeface for everything smaller.",
+    appliesTo: "Body copy, buttons, captions, lists.",
+  },
+  {
+    key: "--radius",
+    label: "Radius",
+    type: "length",
+    group: "shape",
+    description: "Corner roundness — 0 is sharp, 24px+ is soft.",
+    appliesTo: "Cards, buttons, images, chips.",
+  },
+  {
+    key: "--shadow",
+    label: "Shadow",
+    type: "shadow",
+    group: "shape",
+    description: "The depth/elevation style of floating elements.",
+    appliesTo: "Cards, CTAs, and anything lifted off the backdrop.",
+  },
+  {
+    key: "--space",
+    label: "Spacing unit",
+    type: "length",
+    group: "shape",
+    description: "The base unit paddings and gaps are built from.",
+    appliesTo: "Inner padding and gaps inside every component.",
+  },
 ]
+
+/** Catalogue lookup by token key. */
+export const tokenDef = (key: string): TokenDef | undefined =>
+  TOKENS.find((t) => t.key === key)
 
 export const DEFAULT_THEME: Theme = {
   mode: "dark",

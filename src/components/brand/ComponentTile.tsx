@@ -11,6 +11,7 @@ import { emptyScene } from "@/scene/model"
 import { ScenePreview } from "@/components/ScenePreview"
 import { cn } from "@/lib/utils"
 import { ComponentOverridePopover } from "./ComponentOverridePopover"
+import { useTokenHighlight } from "./brand-editor-ui"
 
 export function tileScene(def: ComponentDef, brand: Brand): Scene | null {
   const { w, h } = def.preview ?? { w: 500, h: 300 }
@@ -45,19 +46,32 @@ export function ComponentTile({
     ((override.variants && Object.keys(override.variants).length > 0) ||
       (override.css && Object.keys(override.css).length > 0))
 
-  // Rebuild only when the brand actually changes (tokens resolve in CSS, but
-  // overrides/logo change the built nodes themselves).
-  const scene = useMemo(() => tileScene(def, brand), [def, brand])
+  // Rebuild only on structural changes (overrides/logo/mode change the built
+  // nodes); token values flow through ScenePreview's live `tokens` prop, so a
+  // color-picker drag restyles every tile without any DOM rebuild.
+  const scene = useMemo(
+    () => tileScene(def, brand),
+    [def, override, brand.logo, brand.theme.mode]
+  )
+
+  // Inspector focus/commit feedback: highlight the tiles a token actually
+  // styles, dim the rest, and flash once when the token commits.
+  const { highlighted, dimmed, pingN } = useTokenHighlight(def.tokensUsed)
 
   return (
     <div
       className={cn(
-        "group overflow-hidden rounded-lg border bg-card transition-colors hover:border-primary/50",
-        hidden && "opacity-40"
+        "group relative overflow-hidden rounded-lg border bg-card transition-[opacity,box-shadow,border-color,filter] duration-200 hover:border-primary/50",
+        hidden && "opacity-40",
+        highlighted && "border-primary/60 ring-1 ring-primary/50",
+        dimmed && "opacity-40 saturate-50"
       )}
     >
+      {pingN !== null && <span key={pingN} className="brand-ping" />}
       <div className="canvas-well h-40 overflow-hidden">
-        {scene ? <ScenePreview scene={scene} /> : null}
+        {scene ? (
+          <ScenePreview scene={scene} tokens={brand.theme.tokens} />
+        ) : null}
       </div>
       <div className="flex items-center gap-1.5 border-t px-2.5 py-1.5">
         <span className="truncate text-xs">{def.name}</span>

@@ -17,10 +17,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
-import {
-  ToggleGroup,
-  ToggleGroupItem,
-} from "@/components/ui/toggle-group"
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 
 function prune(override: ComponentOverride): ComponentOverride | null {
   const out: ComponentOverride = {}
@@ -76,8 +73,7 @@ export function ComponentOverridePopover({
         <div className="text-xs font-medium">{def.name}</div>
 
         {(def.variants ?? []).map((axis) => {
-          const selected =
-            override?.variants?.[axis.key] ?? defaults[axis.key]
+          const selected = override?.variants?.[axis.key] ?? defaults[axis.key]
           return (
             <div key={axis.key} className="space-y-1">
               <Label className="text-[11px] text-muted-foreground">
