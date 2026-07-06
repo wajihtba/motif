@@ -41,7 +41,7 @@ function tokensReferenced(root: SceneNode): Set<string> {
 describe("brand component registry", () => {
   it("registers a non-empty catalog with unique ids", () => {
     const defs = list()
-    expect(defs.length).toBeGreaterThanOrEqual(15)
+    expect(defs.length).toBeGreaterThanOrEqual(45)
     expect(new Set(defs.map((d) => d.id)).size).toBe(defs.length)
     expect(groups().length).toBeGreaterThanOrEqual(8)
   })

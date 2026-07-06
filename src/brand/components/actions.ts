@@ -71,6 +71,31 @@ const ctaBase: Record<string, string> = {
   lineHeight: "1",
 }
 
+const finishAxis: VariantAxis = {
+  key: "finish",
+  label: "Finish",
+  def: "flat",
+  options: [
+    { id: "flat", label: "Flat" },
+    {
+      id: "gradient",
+      label: "Gradient",
+      css: {
+        backgroundImage:
+          "linear-gradient(135deg, var(--primary), var(--accent-2))",
+      },
+    },
+    {
+      id: "glossy",
+      label: "Glossy",
+      css: {
+        backgroundImage:
+          "linear-gradient(180deg, rgba(255,255,255,0.3), rgba(255,255,255,0.05) 55%, rgba(0,0,0,0.12))",
+      },
+    },
+  ],
+}
+
 const DEFS: ComponentDef[] = [
   {
     id: "cta",
@@ -81,13 +106,14 @@ const DEFS: ComponentDef[] = [
     tokensUsed: [
       "--primary",
       "--primary-foreground",
+      "--accent-2",
       "--font-body",
       "--radius",
       "--space",
       "--shadow",
     ],
     slots: [{ key: "label", label: "Label", sample: "Shop now" }],
-    variants: [shapeAxis, sizeAxis, caseAxis],
+    variants: [shapeAxis, sizeAxis, caseAxis, finishAxis],
     preview: { w: 700, h: 320 },
     build: ({ content, layout }) =>
       node({
@@ -126,6 +152,86 @@ const DEFS: ComponentDef[] = [
           background: "transparent",
           border: "3px solid var(--primary)",
           color: "var(--primary)",
+        },
+      }),
+  },
+  {
+    id: "cta-link",
+    name: "Link CTA",
+    group: "Actions",
+    blurb: "quiet text call-to-action with an accent arrow",
+    roles: ["cta"],
+    tokensUsed: ["--ink", "--accent", "--font-body"],
+    slots: [{ key: "label", label: "Label", sample: "Explore the collection" }],
+    variants: [
+      {
+        key: "underline",
+        label: "Underline",
+        def: "on",
+        options: [
+          {
+            id: "on",
+            label: "Underlined",
+            css: {
+              textDecoration: "underline",
+              textDecorationColor: "var(--accent)",
+              textUnderlineOffset: "10px",
+              textDecorationThickness: "3px",
+            },
+          },
+          { id: "off", label: "Plain" },
+        ],
+      },
+    ],
+    preview: { w: 800, h: 240 },
+    build: ({ content, layout }) =>
+      node({
+        id: "surface",
+        role: "cta",
+        html: `${content.label} <span style="color:var(--accent)">→</span>`,
+        editable: true,
+        layout,
+        css: {
+          fontFamily: "var(--font-body)",
+          fontWeight: "700",
+          fontSize: "32px",
+          color: "var(--ink)",
+          whiteSpace: "nowrap",
+        },
+      }),
+  },
+  {
+    id: "cta-glass",
+    name: "Glass CTA",
+    group: "Actions",
+    blurb: "frosted translucent button that floats over photos",
+    roles: ["cta"],
+    tokensUsed: [
+      "--ink",
+      "--border",
+      "--font-body",
+      "--radius",
+      "--space",
+      "--shadow",
+    ],
+    slots: [{ key: "label", label: "Label", sample: "Watch the film" }],
+    variants: [shapeAxis, sizeAxis],
+    preview: { w: 700, h: 320 },
+    build: ({ content, layout }) =>
+      node({
+        id: "surface",
+        role: "cta",
+        html: content.label,
+        editable: true,
+        layout,
+        css: {
+          ...ctaBase,
+          background: "rgba(255,255,255,0.12)",
+          backgroundImage:
+            "linear-gradient(180deg, rgba(255,255,255,0.18), rgba(255,255,255,0.02))",
+          border: "1px solid var(--border)",
+          color: "var(--ink)",
+          boxShadow: "var(--shadow)",
         },
       }),
   },
