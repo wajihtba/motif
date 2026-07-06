@@ -42,6 +42,7 @@ import { flatten } from "@/scene/model"
 import { useEditorState } from "@/hooks/use-document-store"
 import { ColorField, LiveSlider } from "./fx-controls"
 import { useEffectPreviews } from "./use-effect-previews"
+import { useFxHoverPreview } from "./use-fx-hover-preview"
 
 const KIND_LABEL: Record<string, string> = {
   "scene-shader": "Scene shaders",
@@ -226,12 +227,13 @@ function PreviewGrid({
   onAdd: (def: AnyEffectDef) => void
 }) {
   const { urls, refresh } = useEffectPreviews(ctrl, defs, snapshotId)
+  const hover = useFxHoverPreview(ctrl)
 
   return (
     <div className="space-y-2 pt-2">
       <div className="flex items-center justify-between">
         <p className="text-[10px] text-muted-foreground">
-          Previews use your actual design
+          Hover to preview on the canvas — click to apply
         </p>
         <button
           title="Refresh previews from the current design"
@@ -256,7 +258,12 @@ function PreviewGrid({
                   <button
                     key={`${d.kind}.${d.id}`}
                     title={d.blurb ?? `${d.name} (${d.group})`}
-                    onClick={() => onAdd(d)}
+                    onMouseEnter={() => hover.enter(d)}
+                    onMouseLeave={hover.leave}
+                    onClick={() => {
+                      hover.commit()
+                      onAdd(d)
+                    }}
                     className="group overflow-hidden rounded-md border text-left transition-colors hover:border-primary"
                   >
                     {url ? (
