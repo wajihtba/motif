@@ -147,6 +147,7 @@ export function normalizeNode(
     editable: raw.editable,
     hidden: raw.hidden,
     locked: raw.locked,
+    allowOverlap: raw.allowOverlap === true ? true : undefined,
   })
   if (Array.isArray(raw.children) && raw.children.length) {
     n.children = raw.children.map((c) => normalizeNode(c, warn))

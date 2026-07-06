@@ -206,6 +206,39 @@ export function boxToLayout(
   }
 }
 
+/** Write a measured pixel rect back into a node's layout WITHOUT changing its
+ *  layout mode. Direct manipulation (drag/resize) must not silently flatten an
+ *  auto-layout `stack` into `absolute` (that strips flexDirection/gap/padding
+ *  and collapses its flow children). So:
+ *   • absolute → recompute anchor offsets + size,
+ *   • stack    → keep every stack field, update only its positioned anchor box,
+ *   • flow     → return null (a flow child is placed by its parent; the caller
+ *                skips it rather than yanking it out of the flow).
+ */
+export function boxToLayoutPreserving(
+  prev: Layout,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  cw: number,
+  ch: number
+): Layout | null {
+  if (prev.mode === "flow") return null
+  const anchor =
+    prev.mode === "absolute" ? prev.anchor : (prev.anchor ?? "top-left")
+  const abs = boxToLayout(x, y, w, h, cw, ch, anchor)
+  if (prev.mode === "absolute") return abs
+  return {
+    ...prev,
+    anchor,
+    dx: abs.dx,
+    dy: abs.dy,
+    width: abs.width,
+    height: abs.height,
+  }
+}
+
 /** Resolve an absolute layout back to a pixel rect within a container. */
 export function layoutToBox(
   layout: Layout,

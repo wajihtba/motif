@@ -25,7 +25,11 @@ export class EditorController {
   constructor(document?: Document) {
     registerCoreCommands()
     this.store = new DocumentStore(document)
-    this.dispatcher = new Dispatcher(this.store, this.history)
+    this.dispatcher = new Dispatcher(
+      this.store,
+      this.history,
+      (id) => this.backend?.measure(id) ?? null
+    )
   }
 
   /** The single mutation entry point (UI widgets and agent tool calls alike). */

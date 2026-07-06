@@ -29,6 +29,7 @@ const GROUPS: Array<{ title: string; rows: Array<[string, string]> }> = [
       ["Arrows / ⇧Arrows", "Nudge 1px / 10px"],
       ["⌘D", "Duplicate selection"],
       ["⌫", "Delete selection"],
+      ["Esc", "Deselect"],
       ["[ / ]", "Send backward / bring forward"],
       ["Space-drag · scroll", "Pan · zoom"],
     ],

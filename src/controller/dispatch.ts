@@ -8,6 +8,7 @@
 // motif_edit tool call and a UI slider drag arrive here identically.
 
 import type { Patch } from "immer"
+import type { Box } from "../engine/backend"
 import type { DocumentStore } from "./store"
 import type { History, HistoryEntry } from "./history"
 import type { AnyCommandDef, CommandSource, Invalidation } from "./types"
@@ -52,7 +53,10 @@ export class Dispatcher {
 
   constructor(
     private store: DocumentStore,
-    private history: History
+    private history: History,
+    /** Live measurement pass-through (null headless — commands fall back to
+     *  normalized-layout estimates). */
+    private measure: (id: string) => Box | null = () => null
   ) {}
 
   /** Begin coalescing: every dispatch until endGesture() accumulates into ONE
@@ -115,9 +119,10 @@ export class Dispatcher {
     const returns: unknown[] = []
     let invalidation: Invalidation = "none"
     try {
+      const ctx = { warn, measure: this.measure }
       const { patches, inversePatches } = this.store.transact((draft) => {
         for (const { def, args } of resolved) {
-          returns.push(def.apply(draft, args, { warn }))
+          returns.push(def.apply(draft, args, ctx))
           invalidation = maxInvalidation(invalidation, def.invalidates)
         }
       })

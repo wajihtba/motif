@@ -6,6 +6,8 @@
 import { beforeEach, describe, expect, it } from "vitest"
 import { EditorController } from "@/controller"
 import { HtmlCanvasBackend } from "@/engine/html-canvas"
+import { applyNodeStyle } from "@/engine/html-canvas/build"
+import { splitDropShadows } from "@/engine/html-canvas/compositor"
 
 let ctrl: EditorController
 let backend: HtmlCanvasBackend
@@ -148,5 +150,67 @@ describe("incremental dom-patch", () => {
     )
     expect(unitEl).toBeTruthy()
     expect(backend.canvas.querySelector('[data-hole="h1"]')).not.toBeNull()
+  })
+})
+
+describe("applyNodeStyle transform composition", () => {
+  it("composes an authored rotate with the anchor-pivot translate", () => {
+    const el = document.createElement("div")
+    applyNodeStyle(el, {
+      id: "badge",
+      layout: {
+        mode: "absolute",
+        anchor: "top-right",
+        dx: -0.07,
+        dy: 0.07,
+        width: "auto",
+        height: "auto",
+      },
+      css: { transform: "rotate(6deg)" },
+    })
+    expect(el.style.transform).toContain("translate(-100%, 0%)")
+    expect(el.style.transform).toContain("rotate(6deg)")
+    // pivot first, authored transform second
+    expect(el.style.transform.indexOf("translate")).toBeLessThan(
+      el.style.transform.indexOf("rotate")
+    )
+  })
+
+  it("keeps the plain pivot when no transform is authored", () => {
+    const el = document.createElement("div")
+    applyNodeStyle(el, {
+      id: "x",
+      layout: {
+        mode: "absolute",
+        anchor: "center",
+        dx: 0,
+        dy: 0,
+        width: 0.5,
+        height: 0.5,
+      },
+      css: {},
+    })
+    expect(el.style.transform).toBe("translate(-50%, -50%)")
+  })
+})
+
+describe("splitDropShadows", () => {
+  it("splits shadows (rgba-safe) from the residual grade", () => {
+    const { shadows, rest } = splitDropShadows(
+      "drop-shadow(0 0 5px #00ffff) drop-shadow(0 16px 24px rgba(0,0,0,0.55)) saturate(1.5) brightness(1.08)"
+    )
+    expect(shadows).toEqual([
+      { x: 0, y: 0, blur: 5, color: "#00ffff" },
+      { x: 0, y: 16, blur: 24, color: "rgba(0,0,0,0.55)" },
+    ])
+    expect(rest).toBe("saturate(1.5) brightness(1.08)")
+  })
+
+  it("passes shadow-free filters through untouched", () => {
+    expect(splitDropShadows("saturate(1.9) contrast(1.15)")).toEqual({
+      shadows: [],
+      rest: "saturate(1.9) contrast(1.15)",
+    })
+    expect(splitDropShadows("none").rest).toBe("none")
   })
 })

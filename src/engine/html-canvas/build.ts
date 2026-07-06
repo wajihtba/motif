@@ -32,9 +32,16 @@ export interface BuildOptions {
 /** Apply a node's compiled layout + free-form css onto an element. */
 export function applyNodeStyle(el: HTMLElement, node: SceneNode): void {
   el.style.cssText = ""
-  Object.assign(el.style, compileLayout(node.layout))
+  const layout = compileLayout(node.layout)
+  Object.assign(el.style, layout)
   el.style.boxSizing = "border-box"
   Object.assign(el.style, node.css)
+  // An authored transform (rotate on a badge/sticker) must COMPOSE with the
+  // anchor-pivot translate from the layout, not replace it — otherwise the
+  // element loses its pivot and shifts by its own size.
+  if (layout.transform && node.css.transform) {
+    el.style.transform = `${layout.transform} ${node.css.transform}`
+  }
   if (node.hidden) el.style.display = "none"
 }
 

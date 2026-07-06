@@ -9,6 +9,7 @@ import { docCommands } from "./doc"
 import { animCommands } from "./anim"
 import { fxCommands } from "./fx"
 import { elementCommands } from "./element"
+import { layoutCommands } from "./layout"
 import { sceneCommands } from "./scene"
 
 let registered = false
@@ -17,6 +18,7 @@ export function registerCoreCommands(): void {
   if (registered) return
   registered = true
   registerCommands(elementCommands)
+  registerCommands(layoutCommands)
   registerCommands(sceneCommands)
   registerCommands(fxCommands)
   registerCommands(animCommands)

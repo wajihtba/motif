@@ -82,6 +82,7 @@ function nodeLine(
     layoutBrief(n),
     n.hidden && "[hidden]",
     n.locked && "[locked]",
+    n.allowOverlap && "[overlap-ok]",
   ]
   return parts.filter(Boolean).join(" ")
 }

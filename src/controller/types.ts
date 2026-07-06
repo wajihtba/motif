@@ -3,6 +3,7 @@
 // zod schema. The UI's widgets and the agent's motif_edit tool dispatch the
 // SAME commands through the SAME gate; at this seam they are indistinguishable.
 
+import type { Box } from "../engine/backend"
 import type { Document } from "../scene/types"
 
 export type CommandSource = "user" | "agent" | "system"
@@ -51,6 +52,9 @@ export class CommandAbort extends Error {}
 export interface CommandCtx {
   /** Repair report — surfaced to the UI and returned to the agent as a diff. */
   warn: (msg: string) => void
+  /** Live measured box (scene px) when a renderer is attached; null headless.
+   *  Layout commands prefer this over normalized-layout estimates. */
+  measure: (id: string) => Box | null
 }
 
 /** Structural view of a zod schema — all dispatch needs. Keeping the seam

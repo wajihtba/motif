@@ -207,10 +207,20 @@ export class Compositor {
     const fctx = this.frameCanvas.getContext("2d")!
     fctx.clearRect(0, 0, W, H)
     fctx.drawImage(this.canvas, 0, 0)
+    const { shadows, rest } = splitDropShadows(this.filterCss(layers, tSec))
     ctx.save()
     ctx.setTransform(1, 0, 0, 1, 0, 0)
-    ctx.filter = this.filterCss(layers, tSec)
     ctx.clearRect(0, 0, W, H)
+    for (const sh of shadows) {
+      ctx.save()
+      ctx.shadowColor = sh.color
+      ctx.shadowBlur = sh.blur
+      ctx.shadowOffsetX = sh.x
+      ctx.shadowOffsetY = sh.y
+      ctx.drawImage(this.frameCanvas, 0, 0)
+      ctx.restore()
+    }
+    ctx.filter = rest
     ctx.drawImage(this.frameCanvas, 0, 0)
     ctx.restore()
   }
@@ -296,10 +306,27 @@ export class Compositor {
     const cy = toDevice(unit.box.y + unit.box.h / 2 + s.y, dpr)
     ctx.save()
     ctx.globalAlpha = Math.min(1, Math.max(0, s.opacity))
-    if (fx?.filters.length) ctx.filter = this.filterCss(fx.filters, tSec)
     ctx.translate(cx, cy)
     if (s.rotate) ctx.rotate((s.rotate * Math.PI) / 180)
     if (s.scale !== 1) ctx.scale(s.scale, s.scale)
+    if (fx?.filters.length) {
+      // drop-shadow() through ctx.filter ghosts the content in some Chromium
+      // rasterizers — draw shadows via the native shadow API instead, then
+      // apply the residual grade (saturate/contrast/…) on the final draw.
+      const { shadows, rest } = splitDropShadows(
+        this.filterCss(fx.filters, tSec)
+      )
+      for (const sh of shadows) {
+        ctx.save()
+        ctx.shadowColor = sh.color
+        ctx.shadowBlur = sh.blur
+        ctx.shadowOffsetX = sh.x
+        ctx.shadowOffsetY = sh.y
+        ctx.drawImage(source, -dw / 2, -dh / 2)
+        ctx.restore()
+      }
+      ctx.filter = rest
+    }
     ctx.drawImage(source, -dw / 2, -dh / 2)
     ctx.restore()
   }
@@ -309,6 +336,56 @@ export class Compositor {
     const unit = this.units.find((u) => u.id === id)
     if (unit) unit.box = box
   }
+}
+
+interface ShadowPass {
+  x: number
+  y: number
+  blur: number
+  color: string
+}
+
+/** Split `drop-shadow(x y blur color)` functions out of a ctx.filter string
+ *  (paren-aware — colors may be rgba(…)). The shadows render via the native
+ *  shadow API; the remaining grade stays a ctx.filter. */
+export function splitDropShadows(css: string): {
+  shadows: ShadowPass[]
+  rest: string
+} {
+  const shadows: ShadowPass[] = []
+  let rest = ""
+  let i = 0
+  while (i < css.length) {
+    const at = css.indexOf("drop-shadow(", i)
+    if (at === -1) {
+      rest += css.slice(i)
+      break
+    }
+    rest += css.slice(i, at)
+    // scan to the matching close paren
+    let depth = 0
+    let end = at + "drop-shadow".length
+    for (; end < css.length; end++) {
+      if (css[end] === "(") depth++
+      else if (css[end] === ")" && --depth === 0) break
+    }
+    const body = css.slice(at + "drop-shadow(".length, end).trim()
+    const m =
+      /^(-?[\d.]+)(?:px)?\s+(-?[\d.]+)(?:px)?\s+(-?[\d.]+)(?:px)?\s+([\s\S]+)$/.exec(
+        body
+      )
+    if (m) {
+      shadows.push({
+        x: parseFloat(m[1]),
+        y: parseFloat(m[2]),
+        blur: parseFloat(m[3]),
+        color: m[4].trim(),
+      })
+    }
+    i = end + 1
+  }
+  rest = rest.replace(/\s+/g, " ").trim()
+  return { shadows, rest: rest || "none" }
 }
 
 function sizeCanvas(c: HTMLCanvasElement, w: number, h: number): void {

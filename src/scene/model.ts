@@ -37,6 +37,7 @@ export function node(partial: Partial<SceneNode> = {}): SceneNode {
     editable: partial.editable,
     hidden: partial.hidden,
     locked: partial.locked,
+    allowOverlap: partial.allowOverlap,
   }
 }
 

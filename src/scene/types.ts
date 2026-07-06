@@ -80,6 +80,10 @@ export interface SceneNode {
   hidden?: boolean
   /** Locked from selection/drag in the UI. */
   locked?: boolean
+  /** Intentional layering — opts this node (and its subtree) out of the
+   *  overlap lint. Scrims/badges over images never need it; set it only for
+   *  deliberate content-on-content overlap (type lockups etc.). */
+  allowOverlap?: boolean
 }
 
 /** shadcn-style design tokens, applied as CSS custom properties on the scene root. */

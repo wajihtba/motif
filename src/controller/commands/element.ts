@@ -293,6 +293,21 @@ export const elementCommands: AnyCommandDef[] = [
   }),
 
   defineCommand({
+    id: "element.setAllowOverlap",
+    title: "Allow overlap",
+    group: "Element",
+    description:
+      "Mark a node as intentionally overlapping (suppresses layout overlap warnings for it and its subtree).",
+    schema: z.object({ id: zId, allow: z.boolean() }),
+    invalidates: "none",
+    apply: (draft, args, { warn }) => {
+      const n = target(draft, args.id, warn)
+      if (args.allow) n.allowOverlap = true
+      else delete n.allowOverlap
+    },
+  }),
+
+  defineCommand({
     id: "element.select",
     title: "Select element(s)",
     group: "Element",

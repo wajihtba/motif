@@ -171,3 +171,246 @@ describe("dispatch basics", () => {
     expect(kids[1].children![0].id).not.toBe("inner")
   })
 })
+
+describe("layout assist", () => {
+  let ctrl: EditorController
+  beforeEach(() => {
+    ctrl = fresh()
+  })
+
+  const absAt = (dy: number) => ({
+    mode: "absolute" as const,
+    anchor: "top-left" as const,
+    dx: 0.1,
+    dy,
+    width: 0.8,
+    height: 0.1,
+  })
+
+  it("element.setAllowOverlap round-trips (and normalize keeps the flag)", () => {
+    ctrl.dispatch({
+      command: "element.create",
+      args: {
+        node: { id: "h1", role: "headline", html: "Hi", allowOverlap: true },
+      },
+    })
+    const nodeOf = () =>
+      ctrl.store.state.document.scene.root.children!.find((c) => c.id === "h1")!
+    expect(nodeOf().allowOverlap).toBe(true)
+
+    ctrl.dispatch({
+      command: "element.setAllowOverlap",
+      args: { id: "h1", allow: false },
+    })
+    expect(nodeOf().allowOverlap).toBeUndefined()
+
+    ctrl.dispatch({
+      command: "element.setAllowOverlap",
+      args: { id: "h1", allow: true },
+    })
+    expect(nodeOf().allowOverlap).toBe(true)
+  })
+
+  it("layout.stackify wraps siblings into a stack ordered by position", () => {
+    // created intentionally out of visual order
+    ctrl.dispatch([
+      {
+        command: "element.create",
+        args: { node: { id: "b", html: "middle", layout: absAt(0.5) } },
+      },
+      {
+        command: "element.create",
+        args: { node: { id: "a", html: "top", layout: absAt(0.1) } },
+      },
+      {
+        command: "element.create",
+        args: { node: { id: "c", html: "bottom", layout: absAt(0.8) } },
+      },
+    ])
+    const r = ctrl.dispatch({
+      command: "layout.stackify",
+      args: { ids: ["a", "b", "c"], direction: "column", gap: 20 },
+    })
+    expect(r.ok).toBe(true)
+    const groupId = r.returns[0] as string
+
+    const root = ctrl.store.state.document.scene.root
+    expect(root.children).toHaveLength(1)
+    const group = root.children![0]
+    expect(group.id).toBe(groupId)
+    expect(group.layout.mode).toBe("stack")
+    // sorted by y, all converted to flow
+    expect(group.children!.map((c) => c.id)).toEqual(["a", "b", "c"])
+    expect(group.children!.every((c) => c.layout.mode === "flow")).toBe(true)
+    expect(ctrl.store.state.selection).toEqual([groupId])
+
+    // one undo restores the flat absolute siblings
+    ctrl.undo()
+    const restored = ctrl.store.state.document.scene.root.children!
+    expect(restored.map((c) => c.id)).toEqual(["b", "a", "c"])
+    expect(restored.every((c) => c.layout.mode === "absolute")).toBe(true)
+  })
+
+  it("layout.stackify aborts unless all ids share one parent", () => {
+    ctrl.dispatch([
+      {
+        command: "element.create",
+        args: { node: { id: "a", html: "x", layout: absAt(0.1) } },
+      },
+      {
+        command: "element.create",
+        args: {
+          node: {
+            id: "wrap",
+            role: "group",
+            children: [{ id: "inner", html: "y" }],
+          },
+        },
+      },
+    ])
+    const r = ctrl.dispatch({
+      command: "layout.stackify",
+      args: { ids: ["a", "inner"] },
+    })
+    expect(r.ok).toBe(false)
+    expect(r.errors[0]).toMatch(/share one parent/)
+    // atomic: nothing changed
+    expect(ctrl.store.state.document.scene.root.children).toHaveLength(2)
+  })
+})
+
+describe("align & distribute", () => {
+  let ctrl: EditorController
+  beforeEach(() => {
+    ctrl = fresh()
+  })
+
+  const absBox = (dx: number, dy: number, w = 0.2, h = 0.1) => ({
+    mode: "absolute" as const,
+    anchor: "top-left" as const,
+    dx,
+    dy,
+    width: w,
+    height: h,
+  })
+  const layoutOf = (id: string) => {
+    const n = ctrl.store.state.document.scene.root.children!.find(
+      (c) => c.id === id
+    )!
+    return n.layout as {
+      dx: number
+      dy: number
+      anchor: string
+      width: unknown
+    }
+  }
+
+  it("layout.align left moves siblings to the leftmost edge, keeping sizes", () => {
+    ctrl.dispatch([
+      {
+        command: "element.create",
+        args: { node: { id: "a", html: "a", layout: absBox(0.1, 0.1) } },
+      },
+      {
+        command: "element.create",
+        args: { node: { id: "b", html: "b", layout: absBox(0.3, 0.3) } },
+      },
+      {
+        command: "element.create",
+        args: { node: { id: "c", html: "c", layout: absBox(0.5, 0.5) } },
+      },
+    ])
+    const r = ctrl.dispatch({
+      command: "layout.align",
+      args: { ids: ["a", "b", "c"], edge: "left" },
+    })
+    expect(r.ok).toBe(true)
+    expect(layoutOf("a").dx).toBe(0.1)
+    expect(layoutOf("b").dx).toBe(0.1)
+    expect(layoutOf("c").dx).toBe(0.1)
+    // untouched: vertical positions, anchor, size
+    expect(layoutOf("b").dy).toBe(0.3)
+    expect(layoutOf("b").anchor).toBe("top-left")
+    expect(layoutOf("b").width).toBe(0.2)
+  })
+
+  it("layout.distribute vertical spreads the middles evenly", () => {
+    ctrl.dispatch([
+      {
+        command: "element.create",
+        args: { node: { id: "a", html: "a", layout: absBox(0.1, 0) } },
+      },
+      {
+        command: "element.create",
+        args: { node: { id: "b", html: "b", layout: absBox(0.1, 0.2) } },
+      },
+      {
+        command: "element.create",
+        args: { node: { id: "c", html: "c", layout: absBox(0.1, 0.7) } },
+      },
+    ])
+    const r = ctrl.dispatch({
+      command: "layout.distribute",
+      args: { ids: ["a", "b", "c"], direction: "vertical" },
+    })
+    expect(r.ok).toBe(true)
+    // first & last fixed; middle centered in the free space: (0+0.1 → 0.7)
+    // inner 0.6*1080, middle h 0.1*1080 → gap 270px → y 378px → dy 0.35
+    expect(layoutOf("a").dy).toBe(0)
+    expect(layoutOf("b").dy).toBe(0.35)
+    expect(layoutOf("c").dy).toBe(0.7)
+  })
+
+  it("layout.distribute with a fixed gap packs from the first", () => {
+    ctrl.dispatch([
+      {
+        command: "element.create",
+        args: { node: { id: "a", html: "a", layout: absBox(0.1, 0) } },
+      },
+      {
+        command: "element.create",
+        args: { node: { id: "b", html: "b", layout: absBox(0.1, 0.5) } },
+      },
+      {
+        command: "element.create",
+        args: { node: { id: "c", html: "c", layout: absBox(0.1, 0.9) } },
+      },
+    ])
+    ctrl.dispatch({
+      command: "layout.distribute",
+      args: { ids: ["a", "b", "c"], direction: "vertical", gap: 0 },
+    })
+    expect(layoutOf("a").dy).toBe(0)
+    expect(layoutOf("b").dy).toBe(0.1)
+    expect(layoutOf("c").dy).toBe(0.2)
+  })
+
+  it("layout.align aborts on flow children (no positions to align)", () => {
+    ctrl.dispatch({
+      command: "element.create",
+      args: {
+        node: {
+          id: "col",
+          role: "group",
+          layout: {
+            mode: "stack",
+            direction: "column",
+            gap: 8,
+            align: "center",
+            justify: "start",
+          },
+          children: [
+            { id: "a", html: "a", layout: { mode: "flow" } },
+            { id: "b", html: "b", layout: { mode: "flow" } },
+          ],
+        },
+      },
+    })
+    const r = ctrl.dispatch({
+      command: "layout.align",
+      args: { ids: ["a", "b"], edge: "left" },
+    })
+    expect(r.ok).toBe(false)
+    expect(r.errors[0]).toMatch(/positioned siblings/)
+  })
+})

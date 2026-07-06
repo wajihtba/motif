@@ -235,6 +235,141 @@ describe("agent loop (recorded streams)", () => {
     expect(tool?.kind === "tool" ? tool.state : null).toBe("error")
   })
 
+  it("layout lint warnings ride the tool_result that caused them", async () => {
+    const ctrl = new EditorController()
+    const chat = new ChatStore()
+    let lintCalls = 0
+    const session = new AgentSession({
+      ctrl,
+      chat,
+      transport: scriptedTransport([
+        toolUseRound("motif_generate", {
+          root: { children: [{ id: "a", role: "headline", html: "Hi" }] },
+        }),
+        textRound("Fixed the spacing."),
+      ]),
+      lint: () => {
+        lintCalls += 1
+        // warn on the generate; clean by the end-of-turn check
+        return Promise.resolve(
+          lintCalls === 1 ? ["layout: #a overlaps #b by 320×48px"] : []
+        )
+      },
+    })
+    await session.send("make something")
+
+    // once after motif_generate + once for the end-of-turn repair check
+    expect(lintCalls).toBe(2)
+    const toolResult = chat.apiMessages[2].content[0] as { content: string }
+    expect(toolResult.content).toContain("scene applied")
+    expect(toolResult.content).toContain("layout: #a overlaps #b by 320×48px")
+    // the UI chip carries the same warnings
+    const tool = chat.getSnapshot().items.find((i) => i.kind === "tool")
+    expect(tool?.kind === "tool" ? tool.warnings : []).toContain(
+      "layout: #a overlaps #b by 320×48px"
+    )
+  })
+
+  it("lint is skipped for selection-only motif_edit batches", async () => {
+    const ctrl = new EditorController()
+    ctrl.dispatch({
+      command: "element.create",
+      args: { node: { id: "h1", role: "headline", html: "Hi" } },
+    })
+    const chat = new ChatStore()
+    let lintCalls = 0
+    const session = new AgentSession({
+      ctrl,
+      chat,
+      transport: scriptedTransport([
+        toolUseRound("motif_edit", {
+          commands: [{ command: "element.select", args: { ids: ["h1"] } }],
+        }),
+        textRound("Selected."),
+      ]),
+      lint: () => {
+        lintCalls += 1
+        return Promise.resolve([])
+      },
+    })
+    await session.send("select the headline")
+    expect(lintCalls).toBe(0)
+  })
+
+  it("auto-repair: one synthetic round when the turn ends with findings", async () => {
+    const ctrl = new EditorController()
+    const chat = new ChatStore()
+    const lintResults = [
+      ["layout: #a overlaps #b by 100×40px"], // after motif_generate
+      ["layout: #a overlaps #b by 100×40px"], // end-of-turn check → repair
+      [], // after the fixing motif_edit
+    ]
+    let lintCalls = 0
+    const session = new AgentSession({
+      ctrl,
+      chat,
+      transport: scriptedTransport([
+        toolUseRound("motif_generate", {
+          root: {
+            children: [
+              { id: "a", role: "headline", html: "Hi" },
+              { id: "b", role: "subhead", html: "There" },
+            ],
+          },
+        }),
+        textRound("Done."), // model ends its turn despite the warning
+        toolUseRound("motif_edit", {
+          commands: [
+            {
+              command: "layout.stackify",
+              args: { ids: ["a", "b"] },
+            },
+          ],
+        }),
+        textRound("Restacked — clean now."),
+      ]),
+      lint: () => Promise.resolve(lintResults[lintCalls++] ?? []),
+    })
+    await session.send("make something")
+
+    // generate-lint, end-of-turn lint, edit-lint (the second end-of-turn
+    // check is skipped: the one repair attempt is spent)
+    expect(lintCalls).toBe(3)
+    const repair = chat.apiMessages.find(
+      (m) =>
+        m.role === "user" &&
+        JSON.stringify(m.content).includes("(automatic layout check)")
+    )
+    expect(repair).toBeTruthy()
+    expect(JSON.stringify(repair!.content)).toContain("allowOverlap")
+    // the fix applied
+    const root = ctrl.store.state.document.scene.root
+    expect(root.children).toHaveLength(1)
+    expect(root.children![0].layout.mode).toBe("stack")
+  })
+
+  it("auto-repair: not triggered when the final lint is clean", async () => {
+    const ctrl = new EditorController()
+    const chat = new ChatStore()
+    const session = new AgentSession({
+      ctrl,
+      chat,
+      transport: scriptedTransport([
+        toolUseRound("motif_generate", {
+          root: { children: [{ id: "a", role: "headline", html: "Hi" }] },
+        }),
+        textRound("Done."),
+      ]),
+      lint: () => Promise.resolve([]),
+    })
+    await session.send("make something")
+    expect(
+      chat.apiMessages.some((m) =>
+        JSON.stringify(m.content).includes("(automatic layout check)")
+      )
+    ).toBe(false)
+  })
+
   it("motif_read returns describe() text", async () => {
     const ctrl = new EditorController()
     ctrl.dispatch({

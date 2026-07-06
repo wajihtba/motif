@@ -59,7 +59,7 @@ export function agentTools(): ToolDefinition[] {
     {
       name: "motif_generate",
       description:
-        "Create or replace the design as one declarative scene. Emit background and large containers FIRST, then content nodes in visual stacking order — the canvas paints progressively while you stream. Prefer semantic roles on every node, theme var(--tokens) in css, and normalized anchor layout. Omitted fields keep their current values.",
+        "Create or replace the design as one declarative scene. Emit background and large containers FIRST, then content nodes in visual stacking order — the canvas paints progressively while you stream. Prefer semantic roles on every node, theme var(--tokens) in css, and normalized anchor layout. Lay content chains out as column stacks; the result reports layout warnings (overlap/overflow) you must resolve. Omitted fields keep their current values.",
       input_schema: jsonSchema(generate.schema),
       eager_input_streaming: true,
     },
@@ -103,11 +103,16 @@ export function agentTools(): ToolDefinition[] {
     {
       name: "motif_export",
       description:
-        "Export the current canvas as an image download for the user. Ask before exporting unless the user requested it.",
+        "Export the current canvas as an image download for the user. Ask before exporting unless the user requested it. Set review:true to get the rendered image back YOURSELF (downscaled, no user download) for a visual check — composition, contrast, crops.",
       input_schema: {
         type: "object",
         properties: {
           type: { type: "string", enum: ["png", "jpeg"] },
+          review: {
+            type: "boolean",
+            description:
+              "Return the rendered image to you for self-review (no user download)",
+          },
         },
         required: ["type"],
         additionalProperties: false,

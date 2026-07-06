@@ -20,6 +20,7 @@ import {
 import { FORMATS } from "@/content/formats"
 import { LOOKS } from "@/content/looks"
 import { useEditorState } from "@/hooks/use-document-store"
+import { findNode } from "@/scene/model"
 
 export function CommandPalette({
   open,
@@ -98,6 +99,90 @@ export function CommandPalette({
             >
               Delete selection
               <CommandShortcut>⌫</CommandShortcut>
+            </CommandItem>
+            <CommandItem
+              value="tidy spacing stack selection clean up layout"
+              disabled={selection.length < 2}
+              onSelect={run(() =>
+                ctrl.dispatch(
+                  {
+                    command: "layout.stackify",
+                    args: { ids: selection },
+                  },
+                  { label: "Tidy spacing" }
+                )
+              )}
+            >
+              Tidy spacing (stack selection)
+            </CommandItem>
+            {(
+              [
+                ["left", "Align left"],
+                ["center-x", "Align horizontal centers"],
+                ["right", "Align right"],
+                ["top", "Align top"],
+                ["center-y", "Align vertical centers"],
+                ["bottom", "Align bottom"],
+              ] as const
+            ).map(([edge, label]) => (
+              <CommandItem
+                key={edge}
+                value={`align arrange ${label}`}
+                disabled={selection.length < 2}
+                onSelect={run(() =>
+                  ctrl.dispatch(
+                    {
+                      command: "layout.align",
+                      args: { ids: selection, edge },
+                    },
+                    { label }
+                  )
+                )}
+              >
+                {label}
+              </CommandItem>
+            ))}
+            {(
+              [
+                ["horizontal", "Distribute horizontally"],
+                ["vertical", "Distribute vertically"],
+              ] as const
+            ).map(([direction, label]) => (
+              <CommandItem
+                key={direction}
+                value={`distribute arrange spacing ${label}`}
+                disabled={selection.length < 3}
+                onSelect={run(() =>
+                  ctrl.dispatch(
+                    {
+                      command: "layout.distribute",
+                      args: { ids: selection, direction },
+                    },
+                    { label }
+                  )
+                )}
+              >
+                {label}
+              </CommandItem>
+            ))}
+            <CommandItem
+              value="allow overlap intentional layering toggle"
+              disabled={!selection.length}
+              onSelect={run(() => {
+                const scene = ctrl.store.state.document.scene
+                const allOn = selection.every(
+                  (id) => findNode(scene, id)?.allowOverlap
+                )
+                ctrl.dispatch(
+                  selection.map((id) => ({
+                    command: "element.setAllowOverlap",
+                    args: { id, allow: !allOn },
+                  })),
+                  { label: "Allow overlap" }
+                )
+              })}
+            >
+              Toggle allow overlap
             </CommandItem>
           </CommandGroup>
 

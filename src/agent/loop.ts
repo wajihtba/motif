@@ -16,6 +16,7 @@
 import type { EditorController, CommandCall } from "../controller"
 import type { ApiMessage, ChatStore } from "./chat"
 import { exportImage } from "../engine/export"
+import { lintLayout, lintText } from "../controller/lint"
 import { contextBlock } from "./prompts"
 import { parsePartialJson } from "./partial-json"
 
@@ -42,12 +43,20 @@ export interface AgentSessionDeps {
   transport: AgentTransport
   /** Deliver an exported file to the user (browser download). */
   deliverFile?: (blob: Blob, filename: string) => void
+  /** Layout lint hook — `layout:` warning lines appended to the tool result
+   *  after a scene-changing call settles. Injectable for headless tests; the
+   *  default measures the live backend (lintAfterSettle). */
+  lint?: () => Promise<string[]>
 }
 
 export class AgentSession {
   private abortController: AbortController | null = null
   /** History seq at the end of the agent's last applied action. */
   private lastSeenSeq = 0
+  /** Whether this send() ran a scene-changing tool (gates the final lint). */
+  private sceneChanged = false
+  /** The one automatic repair request per send() has been spent. */
+  private repairAttempted = false
 
   constructor(private deps: AgentSessionDeps) {}
 
@@ -63,6 +72,8 @@ export class AgentSession {
     const { chat } = this.deps
     if (this.running) return
     this.abortController = new AbortController()
+    this.sceneChanged = false
+    this.repairAttempted = false
     chat.addText("user", userText)
     chat.apiMessages.push({
       role: "user",
@@ -94,7 +105,19 @@ export class AgentSession {
       )
       const outcome = await this.consumeStream(events)
       chat.apiMessages.push({ role: "assistant", content: outcome.blocks })
-      if (outcome.stopReason !== "tool_use" || !outcome.toolUses.length) return
+      if (outcome.stopReason !== "tool_use" || !outcome.toolUses.length) {
+        // The model is done — but if it left measured layout violations on the
+        // canvas, spend ONE extra round asking it to fix or mark them. Only on
+        // a clean end_turn: a max_tokens stop can leave dangling tool_use
+        // blocks that a text-only follow-up message would 400 on.
+        if (
+          outcome.stopReason === "end_turn" &&
+          (await this.maybeRequestRepair())
+        ) {
+          continue
+        }
+        return
+      }
 
       const results: Array<Record<string, unknown>> = []
       for (const tool of outcome.toolUses) {
@@ -286,32 +309,89 @@ export class AgentSession {
     return s as { chatId: string }
   }
 
+  /** End-of-turn guard: when the turn changed the scene and unresolved
+   *  `layout:` findings remain, inject one synthetic user message asking the
+   *  model to fix or mark them, and continue the round loop. Once per send —
+   *  a model that insists twice keeps its layout (flexibility over nagging). */
+  private async maybeRequestRepair(): Promise<boolean> {
+    if (!this.sceneChanged || this.repairAttempted) return false
+    const seqBefore = this.deps.ctrl.history.lastSeq
+    const lines = await this.lintAfterSettle()
+    if (!lines.length) return false
+    // An abort mid-measure must not leave a stale synthetic message behind.
+    if (this.abortController?.signal.aborted) return false
+    // Don't fight the user: if they edited while we were measuring, the
+    // findings may be theirs (mid-drag, deliberate layering) — stand down.
+    const userEdited = this.deps.ctrl.history
+      .since(seqBefore)
+      .some((e) => e.source === "user")
+    if (userEdited) return false
+    this.repairAttempted = true
+    this.deps.chat.apiMessages.push({
+      role: "user",
+      content: [
+        {
+          type: "text",
+          text: `(automatic layout check) unresolved layout warnings:\n${lines.join(
+            "\n"
+          )}\nFix them now with motif_edit — or set allowOverlap: true on nodes whose layering is intentional.`,
+        },
+      ],
+    })
+    return true
+  }
+
+  /** Measure-based layout lint, run after the applied scene settles (images
+   *  decoded, fonts swapped, boxes fresh). Never throws — a lint failure must
+   *  not break the tool loop. Returns `layout:` warning lines. */
+  private async lintAfterSettle(): Promise<string[]> {
+    try {
+      if (this.deps.lint) return await this.deps.lint()
+      const backend = this.deps.ctrl.backendRef
+      if (!backend) return []
+      await Promise.race([
+        document.fonts.ready,
+        new Promise((r) => setTimeout(r, 500)),
+      ])
+      await backend.whenIdle()
+      return lintText(
+        lintLayout(this.deps.ctrl.store.state.document.scene, (id) =>
+          backend.measure(id)
+        )
+      )
+    } catch {
+      return []
+    }
+  }
+
   // --- tool execution ---------------------------------------------------------
 
   private async executeTool(tool: ToolUse): Promise<Record<string, unknown>> {
     const { chat } = this.deps
-    let text: string
+    let content: string | Array<Record<string, unknown>>
     let isError = false
     try {
-      text = await this.runTool(tool)
+      content = await this.runTool(tool)
     } catch (e) {
-      text = e instanceof Error ? e.message : String(e)
+      content = e instanceof Error ? e.message : String(e)
       isError = true
       chat.updateTool(tool.chatId, {
         state: "error",
-        error: text,
+        error: content,
         label: failLabel(tool.name),
       })
     }
     return {
       type: "tool_result",
       tool_use_id: tool.id,
-      content: text,
+      content,
       ...(isError && { is_error: true }),
     }
   }
 
-  private async runTool(tool: ToolUse): Promise<string> {
+  private async runTool(
+    tool: ToolUse
+  ): Promise<string | Array<Record<string, unknown>>> {
     const { ctrl, chat } = this.deps
     const input = (tool.input ?? {}) as Record<string, unknown>
 
@@ -326,15 +406,17 @@ export class AgentSession {
         if (!result.ok) {
           throw new Error(`rejected: ${result.errors.join("; ")}`)
         }
+        this.sceneChanged = true
         const nodes = countNodes(input)
+        const warnings = [...result.warnings, ...(await this.lintAfterSettle())]
         chat.updateTool(tool.chatId, {
           state: "applied",
           label: `Generated the scene · ${nodes} elements`,
-          warnings: result.warnings,
+          warnings,
           historySeq: result.entry?.seq,
         })
         this.lastSeenSeq = ctrl.history.lastSeq
-        return diffText("scene applied", result.warnings, this.userEditsSince())
+        return diffText("scene applied", warnings, this.userEditsSince())
       }
 
       case "motif_edit": {
@@ -349,10 +431,20 @@ export class AgentSession {
             `batch rejected, nothing applied: ${result.errors.join("; ")}`
           )
         }
+        // Lint only when the batch could have moved boxes (skip fx/anim/select).
+        const layoutAffecting =
+          result.entry &&
+          ["style", "layout", "structure", "scene"].includes(
+            result.invalidation
+          )
+        if (layoutAffecting) this.sceneChanged = true
+        const warnings = layoutAffecting
+          ? [...result.warnings, ...(await this.lintAfterSettle())]
+          : result.warnings
         chat.updateTool(tool.chatId, {
           state: "applied",
           label: `Applied ${result.applied} edit${result.applied === 1 ? "" : "s"}`,
-          warnings: result.warnings,
+          warnings,
           historySeq: result.entry?.seq,
         })
         this.lastSeenSeq = ctrl.history.lastSeq
@@ -360,7 +452,7 @@ export class AgentSession {
         return diffText(
           `applied: ${result.applied}` +
             (returns.length ? ` · created: ${returns.join(", ")}` : ""),
-          result.warnings,
+          warnings,
           userEdits
         )
       }
@@ -382,6 +474,29 @@ export class AgentSession {
       case "motif_export": {
         const type = input.type === "jpeg" ? "jpeg" : "png"
         const blob = await exportImage(ctrl.store.state.document.scene, type)
+        if (input.review === true) {
+          // Review pass: the render goes back to the MODEL, not the user.
+          // Downscaled + re-encoded JPEG — a full-res PNG in the transcript
+          // would ride every later request (and can exceed API image limits).
+          chat.updateTool(tool.chatId, {
+            state: "applied",
+            label: "Reviewing the render",
+          })
+          return [
+            {
+              type: "image",
+              source: {
+                type: "base64",
+                media_type: "image/jpeg",
+                data: await reviewJpeg(blob),
+              },
+            },
+            {
+              type: "text",
+              text: "render attached for your review (downscaled) — export again without review to deliver the file to the user",
+            },
+          ]
+        }
         this.deps.deliverFile?.(
           blob,
           `${ctrl.store.state.document.name || "motif"}.${type === "jpeg" ? "jpg" : "png"}`
@@ -497,6 +612,39 @@ function diffText(
   ]
     .filter(Boolean)
     .join("\n")
+}
+
+/** Downscale a render to a transcript-friendly review image (≤1280px long
+ *  edge, JPEG). The API resizes big images anyway — send fewer bytes. */
+async function reviewJpeg(blob: Blob): Promise<string> {
+  const MAX_EDGE = 1280
+  const bmp = await createImageBitmap(blob)
+  const k = Math.min(1, MAX_EDGE / Math.max(bmp.width, bmp.height))
+  const w = Math.max(1, Math.round(bmp.width * k))
+  const h = Math.max(1, Math.round(bmp.height * k))
+  const canvas = document.createElement("canvas")
+  canvas.width = w
+  canvas.height = h
+  canvas.getContext("2d")!.drawImage(bmp, 0, 0, w, h)
+  bmp.close()
+  const jpeg = await new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob(
+      (b) => (b ? resolve(b) : reject(new Error("review re-encode failed"))),
+      "image/jpeg",
+      0.85
+    )
+  })
+  return blobToBase64(jpeg)
+}
+
+async function blobToBase64(blob: Blob): Promise<string> {
+  const bytes = new Uint8Array(await blob.arrayBuffer())
+  let bin = ""
+  const CHUNK = 0x8000 // String.fromCharCode arg-spread stack limit
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    bin += String.fromCharCode(...bytes.subarray(i, i + CHUNK))
+  }
+  return btoa(bin)
 }
 
 function countNodes(input: unknown): number {
