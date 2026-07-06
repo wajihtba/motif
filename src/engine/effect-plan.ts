@@ -3,15 +3,16 @@
 // strings, full-frame region chains, canvas-wide filters, and the scene-shader
 // chain. Runs on stack/structure changes only, never per frame.
 
-import type { EffectLayer, Scene } from "../scene/types"
+import type { EffectLayer, ElementRole, Scene } from "../scene/types"
 import type {
+  AnyEffectDef,
   ElementShaderDef,
   FilterDef,
   PixelDef,
   SceneShaderDef,
 } from "../effects/core/types"
-import { get } from "../effects/core/registry"
-import { nodesByRole } from "../scene/model"
+import { get, policyOf } from "../effects/core/registry"
+import { findNode, nodesByRole } from "../scene/model"
 import "../effects" // side effect: register every catalogue
 
 export interface ResolvedChainLayer {
@@ -41,8 +42,54 @@ export interface EffectPlan {
   canvasFilters: ResolvedFilterLayer[]
   /** Full-frame scene shaders, in stack order. */
   scene: ResolvedSceneLayer[]
+  /** Nodes protected from the full-frame passes: they are isolated paint
+   *  units composited crisp ABOVE the canvas chain / scene chain / canvas
+   *  filters (union of layer.exclude + effect policy denyRoles). */
+  protected: Set<string>
   /** Any time-driven effect → the loop must keep rendering. */
   animated: boolean
+}
+
+/** Node ids protected from full-frame effect passes. One union across all
+ *  enabled full-frame layers (v1 semantics — no per-layer granularity): a
+ *  node excluded from ANY full-frame effect escapes ALL of them and draws
+ *  crisp on top. Sources: the layer's own `exclude` (ids + roles) and the
+ *  effect's policy `denyRoles`. */
+export function protectedIds(scene: Scene): Set<string> {
+  const out = new Set<string>()
+  const addRole = (role: string) => {
+    for (const n of nodesByRole(scene, role as ElementRole)) out.add(n.id)
+  }
+  for (const layer of scene.effects) {
+    if (!layer.enabled) continue
+    const fullFrame =
+      layer.kind === "scene-shader" || layer.target.type === "canvas"
+    if (!fullFrame) continue
+    for (const role of layer.exclude?.roles ?? []) addRole(role)
+    for (const id of layer.exclude?.ids ?? []) out.add(id)
+    const def = defOf(layer)
+    for (const role of (def && policyOf(def).denyRoles) ?? []) addRole(role)
+  }
+  out.delete(scene.root.id) // the root is always the background unit
+  for (const id of [...out]) {
+    if (!findNode(scene, id)) out.delete(id) // never split on a ghost
+  }
+  return out
+}
+
+function defOf(layer: EffectLayer): AnyEffectDef | undefined {
+  switch (layer.kind) {
+    case "scene-shader":
+      return get("scene-shader", layer.effect)
+    case "element-shader":
+      return get("element-shader", layer.effect)
+    case "pixel":
+      return get("pixel", layer.effect)
+    case "filter":
+      return get("filter", layer.effect)
+    default:
+      return undefined
+  }
 }
 
 export function planEffects(scene: Scene): EffectPlan {
@@ -102,13 +149,18 @@ export function planEffects(scene: Scene): EffectPlan {
     }
   }
 
-  return { perUnit, canvasChain, canvasFilters, scene: scenePasses, animated }
+  return {
+    perUnit,
+    canvasChain,
+    canvasFilters,
+    scene: scenePasses,
+    protected: protectedIds(scene),
+    animated,
+  }
 }
 
-function targetIds(scene: Scene, layer: EffectLayer): string[] {
-  if (layer.target.type === "elements") return layer.target.ids
-  if (layer.target.type === "role") {
-    return nodesByRole(scene, layer.target.role).map((n) => n.id)
-  }
-  return []
+function targetIds(_scene: Scene, layer: EffectLayer): string[] {
+  // Role targets are resolved to ids at the normalize gate — the document
+  // only ever stores canvas or element-id targets.
+  return layer.target.type === "elements" ? layer.target.ids : []
 }

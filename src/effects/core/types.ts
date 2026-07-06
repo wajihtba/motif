@@ -15,10 +15,12 @@
 // Adding an effect = add one self-contained def to its group file.
 // Removing one     = delete the def. Nothing else references it by hand.
 
+import type { EffectPolicyPatch } from "./policy"
+
 export type EffectKind =
   "scene-shader" | "element-shader" | "pixel" | "filter" | "anim"
 
-export type ParamType = "range" | "toggle"
+export type ParamType = "range" | "toggle" | "color"
 
 /** Where, within a targeted element, an effect's pixels come from. 'box' = the
  *  whole bounding rect; 'content' = the element's own alpha silhouette; 'text' =
@@ -36,11 +38,13 @@ export interface EffectSupports {
 }
 
 /** One tunable knob. Numeric so it maps cleanly to a GLSL uniform, a slider, and
- *  a JSON-schema `number` for agent tool-calls. */
+ *  a JSON-schema `number` for agent tool-calls. Colors are packed 0xRRGGBB
+ *  integers (exact in f32) decoded in GLSL via the shared up_rgb() helper. */
 export interface EffectParam {
   key: string
   label: string
-  /** 'range' → slider; 'toggle' → switch (0/1). Defaults to 'range'. */
+  /** 'range' → slider; 'toggle' → switch (0/1); 'color' → color picker
+   *  (value is a packed 0xRRGGBB integer). Defaults to 'range'. */
   type?: ParamType
   min: number
   max: number
@@ -65,6 +69,10 @@ interface EffectBase {
   /** Capability contract for the agent/UI. Defaulted per-kind at registration
    *  (see registry.register), so most defs omit it. */
   supports?: EffectSupports
+  /** Placement policy overrides (feature flag, role allow/deny, default
+   *  exclusions). Merged over per-kind defaults and under the JSON config
+   *  overrides — see core/policy.ts and registry.policyOf. */
+  policy?: EffectPolicyPatch
 }
 
 /** Full-scene WebGL shader over the whole composite (lib/effects/scene-shaders). */

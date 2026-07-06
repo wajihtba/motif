@@ -13,9 +13,20 @@ import type {
   EffectParam,
   EffectSupports,
 } from "./types"
+import { mergePolicy, type EffectPolicy, type EffectPolicyPatch } from "./policy"
 
 const tables = new Map<EffectKind, Map<string, AnyEffectDef>>()
 const order = new Map<EffectKind, string[]>()
+
+/** JSON config overrides keyed "<kind>.<id>" (two effects may share an id
+ *  across kinds — the two ditherings do). Set once by the barrel's loader. */
+let policyOverrides = new Map<string, EffectPolicyPatch>()
+
+export function setPolicyOverrides(
+  map: Map<string, EffectPolicyPatch>
+): void {
+  policyOverrides = map
+}
 
 /** Per-kind capability defaults — what each kind of effect can target/scope by
  *  construction. Catalogue defs may override `supports`, but rarely need to.
@@ -51,9 +62,28 @@ function defaultSupports(def: AnyEffectDef): EffectSupports {
   }
 }
 
-/** Resolve an effect's capability (always defined after registration). */
+/** Per-kind default policy: the supports contract + enabled. */
+function defaultPolicy(def: AnyEffectDef): EffectPolicy {
+  const s = def.supports ?? defaultSupports(def)
+  return { enabled: true, targets: s.targets, scopes: s.scopes }
+}
+
+/** The resolved placement policy — the ONE source of truth for where an
+ *  effect may go. defaults ← def.policy ← JSON config override. */
+export function policyOf(def: AnyEffectDef): EffectPolicy {
+  return mergePolicy(
+    defaultPolicy(def),
+    def.policy,
+    policyOverrides.get(`${def.kind}.${def.id}`)
+  )
+}
+
+/** Resolve an effect's capability (always defined after registration).
+ *  Delegates to policyOf so policy overrides flow to legacy callers. */
 export function supportsOf(def: AnyEffectDef): EffectSupports {
-  return def.supports ?? defaultSupports(def)
+  const p = policyOf(def)
+  const s = def.supports ?? defaultSupports(def)
+  return { targets: p.targets, scopes: p.scopes, animatable: s.animatable }
 }
 
 function table(kind: EffectKind): Map<string, AnyEffectDef> {
@@ -143,6 +173,7 @@ export function groups<TKind extends EffectKind>(
   const index = new Map<string, EffectGroup<EffectByKind[TKind]>>()
   for (const def of list(kind)) {
     if (def.id === "none") continue
+    if (!policyOf(def).enabled) continue
     let g = index.get(def.group)
     if (!g) {
       g = { group: def.group, items: [] }
@@ -160,7 +191,8 @@ export function groups<TKind extends EffectKind>(
 export function allEffects(kinds: readonly EffectKind[]): AnyEffectDef[] {
   const out: AnyEffectDef[] = []
   for (const k of kinds)
-    for (const d of list(k)) if (d.id !== "none") out.push(d)
+    for (const d of list(k))
+      if (d.id !== "none" && policyOf(d).enabled) out.push(d)
   return out
 }
 
@@ -193,6 +225,7 @@ export function toolSchema(def: AnyEffectDef): {
   group: string
   description?: string
   supports: EffectSupports
+  policy: EffectPolicy
   params: Record<
     string,
     {
@@ -220,7 +253,10 @@ export function toolSchema(def: AnyEffectDef): {
       minimum: p.min,
       maximum: p.max,
       default: p.def,
-      description: p.label,
+      description:
+        p.type === "color"
+          ? `${p.label} — packed RGB int (0xRRGGBB, e.g. 16711680 = red)`
+          : p.label,
     }
   }
   return {
@@ -230,6 +266,7 @@ export function toolSchema(def: AnyEffectDef): {
     group: def.group,
     description: def.blurb,
     supports: supportsOf(def),
+    policy: policyOf(def),
     params,
   }
 }

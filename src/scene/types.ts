@@ -47,12 +47,43 @@ export type ElementRole =
   | "meta"
   | "group"
 
-/** Where an effect or animation applies. Resolution-independent and stable:
- *  by id(s) or by semantic role, never by index/DOM position. */
+/** Runtime list of every ElementRole (validation, pickers, policy checks). */
+export const ELEMENT_ROLES: readonly ElementRole[] = [
+  "image",
+  "scrim",
+  "vignette",
+  "grain",
+  "eyebrow",
+  "headline",
+  "subhead",
+  "cta",
+  "badge",
+  "price",
+  "meta",
+  "group",
+]
+
+/** Where an effect or animation applies IN THE DOCUMENT: the whole canvas or
+ *  concrete element ids — never "every node of a role". Role-based targeting
+ *  exists only as authoring INPUT (FxTargetInput): the normalize gate resolves
+ *  a role to the ids it matches at apply time, so the stored scene stays
+ *  explicit and the UI never shows per-type effects. */
 export type FxTarget =
   | { type: "canvas" }
   | { type: "elements"; ids: string[] }
-  | { type: "role"; role: ElementRole }
+
+/** Loose authoring form accepted by the gate (agent tools, looks, gallery
+ *  seeds): a role target resolves to {type:"elements"} on normalize. */
+export type FxTargetInput = FxTarget | { type: "role"; role: ElementRole }
+
+/** Loose authoring shapes for the normalize gate: like the document types but
+ *  with FxTargetInput targets (roles resolve to concrete ids on normalize). */
+export type EffectLayerInput = Omit<Partial<EffectLayer>, "target"> & {
+  target?: FxTargetInput
+}
+export type AnimTrackInput = Omit<Partial<AnimTrack>, "target"> & {
+  target?: FxTargetInput
+}
 
 // --- the tree -------------------------------------------------------------------
 
@@ -95,6 +126,14 @@ export interface Theme {
 
 // --- effects & animation layers ------------------------------------------------
 
+/** Nodes protected from a full-frame effect: they composite crisp ABOVE the
+ *  effected frame instead of being processed by it. Only meaningful when the
+ *  layer's target is the canvas. */
+export interface FxExclude {
+  roles?: ElementRole[]
+  ids?: string[]
+}
+
 /** One canvas-only effect, applied to a target at a scope. Stackable + ordered. */
 export interface EffectLayer {
   id: string
@@ -108,6 +147,10 @@ export interface EffectLayer {
   enabled: boolean
   target: FxTarget
   scope: EffectScope
+  /** Full-frame protection: these nodes escape the effect and draw crisp above
+   *  it (canvas-target layers only). Seeded from the effect's policy default
+   *  when omitted; an explicit `{roles:[]}` opts out of protection. */
+  exclude?: FxExclude
   /** Custom GLSL `fx()` body — the code escape hatch when `effect === 'custom'`. */
   frag?: string
   /** Tag for look-owned layers so `look.apply` can replace its predecessor's. */

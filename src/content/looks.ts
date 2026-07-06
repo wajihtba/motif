@@ -6,7 +6,7 @@
 // applyLook() mutates the scene's elements in place and returns the full-scene
 // shader + pixel effect for the caller to push onto the renderer.
 
-import type { EffectLayer, ElementRole, FxTarget } from "../scene/types"
+import type { EffectLayerInput, ElementRole, FxTargetInput } from "../scene/types"
 
 /** A per-element effect bundle a look applies to one role. */
 export interface ElementFx {
@@ -233,9 +233,9 @@ export const lookByName = (name?: string): Look | undefined =>
  *  role-targeted element shaders/filters. Tagged `owner:'look'` so the controller
  *  can drop the previous look's layers before applying a new one. Returned as
  *  loose partials; the controller's normalize gate seeds params + resolves kinds. */
-export function lookToLayers(look: Look): Partial<EffectLayer>[] {
-  const layers: Partial<EffectLayer>[] = []
-  const canvas: FxTarget = { type: "canvas" }
+export function lookToLayers(look: Look): EffectLayerInput[] {
+  const layers: EffectLayerInput[] = []
+  const canvas: FxTargetInput = { type: "canvas" }
   if (look.shader)
     layers.push({
       effect: look.shader,
@@ -248,7 +248,7 @@ export function lookToLayers(look: Look): Partial<EffectLayer>[] {
 
   const roles = look.roles ?? {}
   const add = (role: ElementRole, fx: ElementFx) => {
-    const target: FxTarget = { type: "role", role }
+    const target: FxTargetInput = { type: "role", role }
     const scope = TEXT_ROLES.includes(role) ? "content" : "box"
     if (fx.shader)
       layers.push({

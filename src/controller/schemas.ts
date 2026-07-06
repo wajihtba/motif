@@ -7,10 +7,10 @@
 import { z } from "zod"
 import type { Layout } from "../scene/layout"
 import type {
-  AnimTrack,
+  AnimTrackInput,
   Brief,
-  EffectLayer,
-  FxTarget,
+  EffectLayerInput,
+  FxTargetInput,
   SceneNode,
   Theme,
 } from "../scene/types"
@@ -74,11 +74,21 @@ export const zRole = z.enum([
   "group",
 ])
 
-export const zTarget: z.ZodType<FxTarget> = z.union([
+/** Target INPUT: role targets are accepted as authoring sugar and resolved
+ *  to concrete element ids by the normalize gate — the document itself only
+ *  ever stores canvas or element-id targets. */
+export const zTarget: z.ZodType<FxTargetInput> = z.union([
   z.object({ type: z.literal("canvas") }),
   z.object({ type: z.literal("elements"), ids: z.array(z.string()).min(1) }),
   z.object({ type: z.literal("role"), role: zRole }),
 ])
+
+/** Full-frame protection spec: nodes that escape a canvas-target effect and
+ *  draw crisp above it. `{roles:[]}` is a valid explicit opt-out. */
+export const zExclude = z.object({
+  roles: z.array(zRole).optional(),
+  ids: z.array(z.string()).optional(),
+})
 
 export const zCssMap = z.record(z.string(), z.string())
 
@@ -109,7 +119,7 @@ export const zTheme: z.ZodType<Partial<Theme>> = z.object({
 
 /** Loose layer/track shapes — registry-aware clamping arrives with the effect
  *  (M3) and animation (M4) registries; the gate keeps document shape valid. */
-export const zEffectLayer: z.ZodType<Partial<EffectLayer>> = z
+export const zEffectLayer: z.ZodType<EffectLayerInput> = z
   .object({
     id: z.string().optional(),
     effect: z.string(),
@@ -121,6 +131,7 @@ export const zEffectLayer: z.ZodType<Partial<EffectLayer>> = z
     enabled: z.boolean().optional(),
     target: zTarget.optional(),
     scope: z.enum(["box", "content", "text", "image"]).optional(),
+    exclude: zExclude.optional(),
     frag: z.string().optional(),
     owner: z.string().optional(),
   })
@@ -133,7 +144,7 @@ export const zAnimChannel = z.object({
   ),
 })
 
-export const zAnimTrack: z.ZodType<Partial<AnimTrack>> = z
+export const zAnimTrack: z.ZodType<AnimTrackInput> = z
   .object({
     id: z.string().optional(),
     target: zTarget.optional(),

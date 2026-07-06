@@ -19,6 +19,7 @@ import { walk } from "@/scene/model"
 import { cn } from "@/lib/utils"
 import { useEditorState } from "@/hooks/use-document-store"
 import { useHoverId } from "@/hooks/use-hover"
+import { setInspectorTab } from "@/hooks/use-inspector-tab"
 import { computeLayerMove } from "./layers-move"
 
 export function LayersPanel({
@@ -29,8 +30,23 @@ export function LayersPanel({
   hover: HoverStore
 }) {
   const state = useEditorState(ctrl)
-  const root = state.document.scene.root
+  const scene = state.document.scene
+  const root = scene.root
   const selection = state.selection
+
+  // Nodes any enabled effect layer resolves to — drives the row "fx" badge.
+  const fxIds = useMemo(() => {
+    const ids = new Set<string>()
+    for (const layer of scene.effects) {
+      if (!layer.enabled) continue
+      if (layer.target.type === "elements")
+        for (const id of layer.target.ids) ids.add(id)
+    }
+    return ids
+  }, [scene.effects])
+  const canvasFx = scene.effects.some(
+    (l) => l.enabled && l.target.type === "canvas"
+  )
 
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
   const [dragId, setDragId] = useState<string | null>(null)
@@ -114,6 +130,42 @@ export function LayersPanel({
       onMouseLeave={() => hover.setHover(null)}
     >
       <div className="flex-1 overflow-y-auto py-1">
+        {/* Canvas pseudo-layer: selects the whole-canvas context (empty
+            selection) so page background, full-frame effects, and their
+            protect settings are always one click away. */}
+        <div
+          onClick={() =>
+            ctrl.dispatch({ command: "element.select", args: { ids: [] } })
+          }
+          className={cn(
+            "group relative mb-1 flex h-7 cursor-default items-center gap-1.5 border-b pr-1.5 pl-1.5 text-xs select-none",
+            selection.length === 0
+              ? "bg-primary/15 text-foreground"
+              : "hover:bg-muted/40"
+          )}
+        >
+          {selection.length === 0 && (
+            <span className="absolute top-0 bottom-0 left-0 w-0.5 bg-primary" />
+          )}
+          <span className="flex size-4 shrink-0 items-center justify-center text-muted-foreground">
+            ▣
+          </span>
+          <span className="min-w-0 flex-1 truncate font-medium">Canvas</span>
+          {canvasFx && (
+            <button
+              type="button"
+              title="Has full-frame effects — open the Effects tab"
+              onClick={(e) => {
+                e.stopPropagation()
+                ctrl.dispatch({ command: "element.select", args: { ids: [] } })
+                setInspectorTab("effects")
+              }}
+              className="shrink-0 rounded-sm bg-primary/15 px-1 text-[9px] font-semibold tracking-wide text-primary uppercase"
+            >
+              fx
+            </button>
+          )}
+        </div>
         {children.length === 0 ? (
           <p className="px-3 py-6 text-center text-xs text-muted-foreground">
             No layers yet. Generate a design in chat, or add elements on the
@@ -136,6 +188,7 @@ export function LayersPanel({
                 node={n}
                 depth={0}
                 selection={selection}
+                fxIds={fxIds}
                 collapsed={collapsed}
                 toggleCollapse={toggleCollapse}
                 onSelect={select}
@@ -163,6 +216,7 @@ interface RowProps {
   node: SceneNode
   depth: number
   selection: string[]
+  fxIds: Set<string>
   collapsed: Set<string>
   toggleCollapse: (id: string) => void
   onSelect: (id: string, e: React.MouseEvent) => void
@@ -181,6 +235,7 @@ function LayerRow(props: RowProps) {
     node,
     depth,
     selection,
+    fxIds,
     collapsed,
     toggleCollapse,
     onSelect,
@@ -279,6 +334,26 @@ function LayerRow(props: RowProps) {
         <TypeGlyph node={node} />
 
         <span className="min-w-0 flex-1 truncate">{nodeName(node)}</span>
+
+        {/* fx badge — this node is targeted by an enabled effect layer;
+            click selects it and jumps to the Effects tab */}
+        {fxIds.has(node.id) && (
+          <button
+            type="button"
+            title="Has effects — open the Effects tab"
+            onClick={(e) => {
+              e.stopPropagation()
+              ctrl.dispatch({
+                command: "element.select",
+                args: { ids: [node.id] },
+              })
+              setInspectorTab("effects")
+            }}
+            className="shrink-0 rounded-sm bg-primary/15 px-1 text-[9px] font-semibold tracking-wide text-primary uppercase"
+          >
+            fx
+          </button>
+        )}
 
         {/* role tag */}
         {node.role && node.role !== "group" && (

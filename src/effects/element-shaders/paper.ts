@@ -13,7 +13,7 @@ export const paper: ElementShaderDef[] = [
   {
     kind: "element-shader",
     id: "dithering",
-    name: "Dithering",
+    name: "Dithering (element)",
     group: "Paper",
     animated: true,
     animateByDefault: true,

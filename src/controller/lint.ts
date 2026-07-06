@@ -40,7 +40,7 @@ const DECOR_ROLES = new Set(["image", "scrim", "vignette", "grain"])
 
 const EDGE_TOLERANCE = 2 // px slack for frame/container overflow
 
-interface Entry {
+export interface LintEntry {
   n: SceneNode
   parent: SceneNode | null
   /** Ancestor ids (root included) — for ancestor/descendant pair exclusion. */
@@ -52,14 +52,13 @@ interface Entry {
   surface: boolean
 }
 
-export function lintLayout(
+/** Every lint-relevant content box in the measured scene — the shared world
+ *  model for lintLayout and the auto-fix placement search (autofix.ts). */
+export function collectEntries(
   scene: Scene,
-  measure: (id: string) => Box | null,
-  opts: LintOptions = {}
-): LintFinding[] {
-  const o = { ...DEFAULTS, ...opts }
-  const entries: Entry[] = []
-
+  measure: (id: string) => Box | null
+): LintEntry[] {
+  const entries: LintEntry[] = []
   const visit = (
     n: SceneNode,
     parent: SceneNode | null,
@@ -89,7 +88,51 @@ export function lintLayout(
     }
   }
   visit(scene.root, null, new Set(), null)
+  return entries
+}
 
+/** Pairs that can never be a collision no matter their boxes: a node against
+ *  its own ancestor/descendant, and flow siblings of one stack (the browser
+ *  lays those out). */
+export function pairExcluded(a: LintEntry, b: LintEntry): boolean {
+  if (a.ancestorIds.has(b.n.id) || b.ancestorIds.has(a.n.id)) return true
+  return !!(
+    a.parent &&
+    a.parent === b.parent &&
+    a.parent.layout.mode === "stack" &&
+    a.n.layout.mode === "flow" &&
+    b.n.layout.mode === "flow"
+  )
+}
+
+/** The overlap-severity rule on a pair of (possibly hypothetical) boxes —
+ *  thresholds identical to what lintLayout flags, so auto-fix placements are
+ *  validated against exactly the rule that would re-flag them. */
+export function boxesCollide(
+  a: { box: Box; text: boolean },
+  b: { box: Box; text: boolean },
+  o: Required<LintOptions> = DEFAULTS
+): boolean {
+  const ow = overlap1d(a.box.x, a.box.w, b.box.x, b.box.w)
+  const oh = overlap1d(a.box.y, a.box.h, b.box.y, b.box.h)
+  if (ow <= 0 || oh <= 0) return false
+  const bothText = a.text && b.text
+  const depth = bothText ? o.textDepthPx : o.minDepthPx
+  if (ow < depth || oh < depth) return false
+  if (!bothText) {
+    const smaller = Math.min(a.box.w * a.box.h, b.box.w * b.box.h)
+    if (ow * oh < o.minAreaFrac * smaller) return false
+  }
+  return true
+}
+
+export function lintLayout(
+  scene: Scene,
+  measure: (id: string) => Box | null,
+  opts: LintOptions = {}
+): LintFinding[] {
+  const o = { ...DEFAULTS, ...opts }
+  const entries = collectEntries(scene, measure)
   const findings: LintFinding[] = []
 
   // 1. content-on-content overlap ------------------------------------------
@@ -97,27 +140,10 @@ export function lintLayout(
     for (let j = i + 1; j < entries.length; j++) {
       const a = entries[i]
       const b = entries[j]
-      if (a.ancestorIds.has(b.n.id) || b.ancestorIds.has(a.n.id)) continue
-      // Flow siblings of one stack cannot collide — the browser lays them out.
-      if (
-        a.parent &&
-        a.parent === b.parent &&
-        a.parent.layout.mode === "stack" &&
-        a.n.layout.mode === "flow" &&
-        b.n.layout.mode === "flow"
-      ) {
-        continue
-      }
+      if (pairExcluded(a, b)) continue
+      if (!boxesCollide(a, b, o)) continue
       const ow = overlap1d(a.box.x, a.box.w, b.box.x, b.box.w)
       const oh = overlap1d(a.box.y, a.box.h, b.box.y, b.box.h)
-      if (ow <= 0 || oh <= 0) continue
-      const bothText = a.text && b.text
-      const depth = bothText ? o.textDepthPx : o.minDepthPx
-      if (ow < depth || oh < depth) continue
-      if (!bothText) {
-        const smaller = Math.min(a.box.w * a.box.h, b.box.w * b.box.h)
-        if (ow * oh < o.minAreaFrac * smaller) continue
-      }
       findings.push({
         kind: "overlap",
         ids: [a.n.id, b.n.id],

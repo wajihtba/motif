@@ -18,10 +18,10 @@
 
 import type { Anchor, Layout, Size } from "../scene/layout"
 import type {
-  AnimTrack,
+  AnimTrackInput,
   Brief,
   Document,
-  EffectLayer,
+  EffectLayerInput,
   Scene,
   SceneNode,
   Theme,
@@ -216,9 +216,9 @@ export interface GalleryExample {
   /** Curated look baked into scene.effects. */
   look?: string
   /** Extra hand-authored effect layers. */
-  effects?: Partial<EffectLayer>[]
+  effects?: EffectLayerInput[]
   /** Engine animations baked into scene.animations. */
-  anims?: Partial<AnimTrack>[]
+  anims?: AnimTrackInput[]
   /** Video timeline length (seconds). */
   duration?: number
 }
@@ -1900,18 +1900,18 @@ export function buildGalleryDocument(ex: GalleryExample): Document {
   const look = ex.look ? lookByName(ex.look) : undefined
   if (look) {
     for (const raw of lookToLayers(look)) {
-      const layer = normalizeLayer(raw, { type: "canvas" })
+      const layer = normalizeLayer(raw, { type: "canvas" }, undefined, scene)
       if (layer) scene.effects.push(layer)
     }
   }
   // Extra hand-authored effects.
   for (const raw of ex.effects ?? []) {
-    const layer = normalizeLayer(raw, { type: "canvas" })
+    const layer = normalizeLayer(raw, { type: "canvas" }, undefined, scene)
     if (layer) scene.effects.push(layer)
   }
   // Animations.
   for (const raw of ex.anims ?? []) {
-    const track = normalizeTrack(raw, { type: "canvas" })
+    const track = normalizeTrack(raw, { type: "canvas" }, undefined, scene)
     if (track) scene.animations.push(track)
   }
 

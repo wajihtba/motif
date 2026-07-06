@@ -14,7 +14,7 @@ import { strFromU8, strToU8, unzipSync, zipSync } from "fflate"
 import type { Document } from "../scene/types"
 import type { ProjectRecord, StoredChat } from "./projects"
 import { getAssetBlob, putAsset } from "./assets"
-import { newProjectRecord, putProject } from "./projects"
+import { migrateDocument, newProjectRecord, putProject } from "./projects"
 
 const VERSION = 1
 
@@ -65,6 +65,7 @@ export async function importMotifFile(file: File): Promise<ProjectRecord> {
     await putAsset(new Blob([bytes]), id)
   }
 
+  migrateDocument(document) // files written by older builds
   const record = newProjectRecord(undefined, document.name)
   record.document = document
   record.chat = chat

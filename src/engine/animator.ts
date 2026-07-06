@@ -10,7 +10,6 @@
 import type { AnimChannel, AnimTrack, Scene } from "../scene/types"
 import type { UnitSample } from "./backend"
 import { animPreset, presetDefaults } from "../effects/anims/presets"
-import { nodesByRole } from "../scene/model"
 
 interface CompiledTrack {
   track: AnimTrack
@@ -184,12 +183,9 @@ function ease(name: string | undefined, x: number): number {
   }
 }
 
-function targetIds(scene: Scene, track: AnimTrack): string[] {
-  if (track.target.type === "elements") return track.target.ids
-  if (track.target.type === "role") {
-    return nodesByRole(scene, track.target.role).map((n) => n.id)
-  }
-  return []
+function targetIds(_scene: Scene, track: AnimTrack): string[] {
+  // Role targets resolve to ids at the normalize gate.
+  return track.target.type === "elements" ? track.target.ids : []
 }
 
 function clamp01(x: number): number {

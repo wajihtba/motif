@@ -1,6 +1,9 @@
 // Retro full-scene shaders — analogue / hardware-display looks (CRT, VHS, dot
-// screens, LED matrix, ordered dither). GLSL main() bodies are byte-identical to
-// the legacy catalogue; the shared prelude is prepended by the scene stage.
+// screens, LED matrix, ordered dither). Originally ported byte-identical from
+// the legacy catalogue; the quantizing looks (dither/halftone/ascii/LED) have
+// since grown u_p params so their harshness is tunable. The shared prelude is
+// prepended by the scene stage. Default text/CTA protection for this group
+// lives in ../config/scene-shader.<id>.json (policy defaultExclude).
 
 import type { SceneShaderDef } from "../core/types"
 
@@ -35,17 +38,21 @@ export const retro: SceneShaderDef[] = [
     group: "Retro",
     animated: false,
     pointer: false,
-    params: [],
+    params: [
+      { key: "scale", label: "Dot size", min: 3, max: 16, step: 0.5, def: 6 },
+      { key: "mix", label: "Strength", min: 0, max: 1, step: 0.01, def: 1 },
+    ],
     frag: `void main() {
   vec3 col = texture2D(u_tex, v_uv).rgb;
   float lum = lumc(col);
-  float scale = 6.0;
+  float scale = max(u_p[0], 1.0);
   vec2 p = v_uv * u_res / scale;
   vec2 grid = fract(p) - 0.5;
   float d = length(grid);
   float dot_ = step(d, (1.0 - lum) * 0.6);
   vec3 ink = mix(vec3(0.05,0.05,0.1), col, 0.25);
-  gl_FragColor = vec4(mix(vec3(0.96), ink, dot_), 1.0);
+  vec3 tone = mix(vec3(0.96), ink, dot_);
+  gl_FragColor = vec4(mix(col, tone, clamp(u_p[1], 0.0, 1.0)), 1.0);
 }`,
   },
 
@@ -57,7 +64,10 @@ export const retro: SceneShaderDef[] = [
     group: "Retro",
     animated: false,
     pointer: false,
-    params: [],
+    params: [
+      { key: "cell", label: "Cell size", min: 4, max: 16, step: 1, def: 8 },
+      { key: "mix", label: "Strength", min: 0, max: 1, step: 0.01, def: 1 },
+    ],
     frag: `float glyph(float lum, vec2 p) {
   float b = 0.0;
   if (lum > 0.2) { b += step(abs(p.y - 0.5), 0.06); }
@@ -67,14 +77,15 @@ export const retro: SceneShaderDef[] = [
   return clamp(b, 0.0, 1.0);
 }
 void main() {
-  float cell = 8.0;
+  float cell = max(u_p[0], 2.0);
   vec2 grid = floor(v_uv * u_res / cell) * cell / u_res;
   vec3 col = texture2D(u_tex, grid + (cell * 0.5) / u_res).rgb;
   float lum = lumc(col);
   vec2 p = fract(v_uv * u_res / cell);
   float g = glyph(lum, p);
   vec3 ink = mix(vec3(0.02,0.05,0.03), vec3(0.4,1.0,0.5), lum);
-  gl_FragColor = vec4(ink * g, 1.0);
+  vec3 src = texture2D(u_tex, v_uv).rgb;
+  gl_FragColor = vec4(mix(src, ink * g, clamp(u_p[1], 0.0, 1.0)), 1.0);
 }`,
   },
 
@@ -116,9 +127,11 @@ void main() {
     group: "Retro",
     animated: false,
     pointer: false,
-    params: [],
+    params: [
+      { key: "cell", label: "Cell size", min: 3, max: 14, step: 1, def: 7 },
+    ],
     frag: `void main() {
-  float cell = 7.0;
+  float cell = max(u_p[0], 2.0);
   vec2 g = floor(v_uv * u_res / cell) * cell / u_res;
   vec3 col = texture2D(u_tex, g + (cell * 0.5) / u_res).rgb;
   vec2 f = fract(v_uv * u_res / cell) - 0.5;
@@ -128,25 +141,50 @@ void main() {
   },
 
   // Dithering — ordered Bayer 1-bit dither of the whole composition (the
-  // paper-design hero look applied image-wide: ink on phosphor paper).
+  // paper-design hero look applied image-wide: ink on phosphor paper). The
+  // full-frame counterpart of the element-shader "Dithering (element)" —
+  // policy default-protects text/cta so type stays legible.
   {
     kind: "scene-shader",
     id: "dithering",
-    name: "Dither",
+    name: "Dither (full frame)",
     group: "Retro",
+    blurb:
+      "1-bit ordered dither over the whole frame. Protects text/CTA by default; tune cell size and strength.",
     animated: false,
     pointer: false,
-    params: [],
+    params: [
+      { key: "cell", label: "Cell size", min: 1, max: 8, step: 0.5, def: 2 },
+      { key: "mix", label: "Strength", min: 0, max: 1, step: 0.01, def: 1 },
+      {
+        key: "ink",
+        label: "Ink color",
+        type: "color",
+        min: 0,
+        max: 0xffffff,
+        step: 1,
+        def: 0x0a0d14, // near-black ink
+      },
+      {
+        key: "paper",
+        label: "Paper color",
+        type: "color",
+        min: 0,
+        max: 0xffffff,
+        step: 1,
+        def: 0xd9e0f5, // cool paper white
+      },
+    ],
     frag: `float bayer2(vec2 a){ a = floor(a); return fract(a.x * 0.5 + a.y * a.y * 0.75); }
 void main() {
   vec3 src = texture2D(u_tex, v_uv).rgb;
   float lum = lumc(src);
-  vec2 bp = floor(v_uv * u_res / 2.0);
+  vec2 bp = floor(v_uv * u_res / max(u_p[0], 0.5));
   float th = bayer2(0.5 * bp) * 0.25 + bayer2(bp);   // 4x4 ordered matrix
   float q = step(th, lum);
-  vec3 ink = vec3(0.04, 0.05, 0.08);
-  vec3 paper = src * 0.4 + vec3(0.85, 0.88, 0.96) * 0.7;
-  gl_FragColor = vec4(mix(ink, paper, q), 1.0);
+  vec3 ink = up_rgb(u_p[2]);
+  vec3 paper = src * 0.4 + up_rgb(u_p[3]) * 0.7;
+  gl_FragColor = vec4(mix(src, mix(ink, paper, q), clamp(u_p[1], 0.0, 1.0)), 1.0);
 }`,
   },
 ]

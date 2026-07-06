@@ -3,14 +3,24 @@
 import type { EditorController } from "@/controller"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import {
+  setInspectorTab,
+  useInspectorTab,
+  type InspectorTab,
+} from "@/hooks/use-inspector-tab"
 import { DesignPanel } from "./DesignPanel"
 import { AnimatePanel } from "./AnimatePanel"
 import { EffectsPanel } from "./EffectsPanel"
 
 export function InspectorTabs({ ctrl }: { ctrl: EditorController }) {
+  const tab = useInspectorTab()
   return (
     <aside className="flex w-72 shrink-0 flex-col border-l bg-background">
-      <Tabs defaultValue="design" className="flex min-h-0 flex-1 flex-col">
+      <Tabs
+        value={tab}
+        onValueChange={(v) => setInspectorTab(v as InspectorTab)}
+        className="flex min-h-0 flex-1 flex-col"
+      >
         <TabsList className="mx-3 mt-2 grid grid-cols-3">
           <TabsTrigger value="design">Design</TabsTrigger>
           <TabsTrigger value="effects">Effects</TabsTrigger>

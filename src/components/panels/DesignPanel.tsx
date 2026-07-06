@@ -4,7 +4,7 @@
 
 import { useEffect, useState } from "react"
 import type { EditorController } from "@/controller"
-import type { Anchor, Layout } from "@/scene/layout"
+import type { Anchor } from "@/scene/layout"
 import type { SceneNode } from "@/scene/types"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/select"
 import { Separator } from "@/components/ui/separator"
 import { Textarea } from "@/components/ui/textarea"
-import { ANCHORS, boxToLayout } from "@/scene/layout"
+import { ANCHORS } from "@/scene/layout"
 import { findNode } from "@/scene/model"
 import { THEME_PRESETS } from "@/scene/theme"
 import { useEditorState } from "@/hooks/use-document-store"
@@ -186,7 +186,9 @@ function NodeInspector({
   )
 }
 
-/** 3×3 anchor grid — re-anchors while keeping the node's visual position. */
+/** 3×3 anchor grid — an align control: clicking a cell MOVES the element to
+ *  that region of its container (anchor with zero offsets), keeping its size.
+ *  (It used to re-anchor in place, which changed nothing visible.) */
 function AnchorPicker({
   ctrl,
   node,
@@ -205,23 +207,9 @@ function AnchorPicker({
     )
   }
   const setAnchor = (anchor: Anchor) => {
-    const box = ctrl.backendRef?.measure(node.id)
-    const scene = ctrl.store.state.document.scene
-    // Keep the visual box; re-express it relative to the new anchor.
-    const next: Layout = box
-      ? boxToLayout(
-          box.x,
-          box.y,
-          box.w,
-          box.h,
-          scene.baseWidth,
-          scene.baseHeight,
-          anchor
-        )
-      : { ...layout, anchor }
     ctrl.dispatch({
       command: "element.setLayout",
-      args: { id: node.id, layout: next },
+      args: { id: node.id, layout: { ...layout, anchor, dx: 0, dy: 0 } },
     })
   }
   return (

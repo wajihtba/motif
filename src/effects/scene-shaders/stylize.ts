@@ -105,12 +105,32 @@ export const stylize: SceneShaderDef[] = [
     group: "Stylize",
     animated: false,
     pointer: false,
-    params: [],
+    params: [
+      {
+        key: "shadow",
+        label: "Shadow color",
+        type: "color",
+        min: 0,
+        max: 0xffffff,
+        step: 1,
+        def: 0x1a0f52, // deep indigo
+      },
+      {
+        key: "highlight",
+        label: "Highlight color",
+        type: "color",
+        min: 0,
+        max: 0xffffff,
+        step: 1,
+        def: 0xff6b9e, // hot pink
+      },
+      { key: "mix", label: "Strength", min: 0, max: 1, step: 0.01, def: 1 },
+    ],
     frag: `void main() {
-  float l = lumc(texture2D(u_tex, v_uv).rgb);
-  vec3 lo = vec3(0.10, 0.06, 0.32);   // deep indigo shadows
-  vec3 hi = vec3(1.00, 0.42, 0.62);   // hot-pink highlights
-  gl_FragColor = vec4(mix(lo, hi, smoothstep(0.05, 0.95, l)), 1.0);
+  vec3 src = texture2D(u_tex, v_uv).rgb;
+  float l = lumc(src);
+  vec3 tone = mix(up_rgb(u_p[0]), up_rgb(u_p[1]), smoothstep(0.05, 0.95, l));
+  gl_FragColor = vec4(mix(src, tone, clamp(u_p[2], 0.0, 1.0)), 1.0);
 }`,
   },
 

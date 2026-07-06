@@ -9,6 +9,7 @@ import type { LintFinding } from "@/controller/lint"
 import type { HtmlCanvasBackend } from "@/engine/html-canvas"
 import type { SnapGuide } from "@/engine/snap"
 import type { TopBarViewport } from "./TopBar"
+import { autofixLayout } from "@/controller/autofix"
 import { lintLayout } from "@/controller/lint"
 import { Interaction } from "@/engine/interaction"
 import type { Handle } from "@/engine/resize"
@@ -40,6 +41,9 @@ export function CanvasStage({
   const [guides, setGuides] = useState<SnapGuide[]>([])
   const state = useEditorState(ctrl)
   const scene = state.document.scene
+  const findings = useLintFindings(ctrl, backend)
+  const [autoFix, setAutoFix] = useState(false)
+  useAutofix(ctrl, backend, findings, autoFix)
 
   useEffect(() => {
     const vpEl = vpRef.current
@@ -141,7 +145,12 @@ export function CanvasStage({
             interactionRef.current?.startResize(e, handle)
           }
         />
-        <LintOverlay ctrl={ctrl} backend={backend} zoom={zoom} />
+        <LintOverlay
+          ctrl={ctrl}
+          backend={backend}
+          zoom={zoom}
+          findings={findings}
+        />
         <GuideOverlay guides={guides} zoom={zoom} />
         {editingId && (
           <InlineTextEditor
@@ -178,8 +187,109 @@ export function CanvasStage({
           {scene.baseWidth} × {scene.baseHeight} · {scene.format}
         </div>
       </div>
+      {/* screen-space (outside the viewport transform): lint status + the
+          auto-fix toggle. While ON, fresh warnings are resolved on sight. */}
+      {(findings.length > 0 || autoFix) && (
+        <div
+          data-motif="autofix-toggle"
+          className="absolute top-3 right-3 z-10 flex items-center gap-2 rounded-full border bg-background/90 py-1 pr-1 pl-3 text-xs shadow-md backdrop-blur"
+        >
+          <span
+            className={
+              findings.length
+                ? "text-[oklch(0.76_0.16_70)]"
+                : "text-muted-foreground"
+            }
+          >
+            {findings.length
+              ? `⚠ ${findings.length} layout warning${findings.length > 1 ? "s" : ""}`
+              : "Layout clean"}
+          </span>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={autoFix}
+            onClick={() => setAutoFix((v) => !v)}
+            className={`rounded-full px-2.5 py-1 font-medium transition-colors ${
+              autoFix
+                ? "bg-primary text-primary-foreground"
+                : "bg-muted text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Auto-fix {autoFix ? "on" : "off"}
+          </button>
+        </div>
+      )}
     </div>
   )
+}
+
+/** The same layout lint the agent sees, recomputed against MEASURED boxes
+ *  whenever the scene settles (debounced past the engine's paint + webfont
+ *  swaps). Single source for the badges overlay and the auto-fix loop. */
+function useLintFindings(
+  ctrl: EditorController,
+  backend: HtmlCanvasBackend
+): LintFinding[] {
+  const state = useEditorState(ctrl)
+  const scene = state.document.scene
+  const [findings, setFindings] = useState<LintFinding[]>([])
+
+  useEffect(() => {
+    let cancelled = false
+    const compute = () => {
+      if (cancelled) return
+      setFindings(
+        lintLayout(ctrl.store.state.document.scene, (id) => backend.measure(id))
+      )
+    }
+    const t = setTimeout(() => {
+      void backend.whenIdle().then(() => {
+        compute()
+        // A late webfont swap reflows boxes without a store change —
+        // recompute once more when fonts finish.
+        if (document.fonts.status === "loading") {
+          void document.fonts.ready.then(compute)
+        }
+      })
+    }, 300)
+    return () => {
+      cancelled = true
+      clearTimeout(t)
+    }
+  }, [scene, backend, ctrl])
+
+  return findings
+}
+
+/** While the toggle is ON, resolve fresh lint findings automatically. Each
+ *  dispatch reflows the scene and re-runs the lint, so this converges as a
+ *  fix→measure→fix loop — capped per warning burst so an unfixable finding
+ *  (or two stubborn boxes trading places) can never ping-pong forever. */
+const MAX_AUTOFIX_PASSES = 4
+
+function useAutofix(
+  ctrl: EditorController,
+  backend: HtmlCanvasBackend,
+  findings: LintFinding[],
+  enabled: boolean
+) {
+  const passes = useRef(0)
+  useEffect(() => {
+    if (!enabled || !findings.length) {
+      passes.current = 0 // clean (or off) — arm for the next burst
+      return
+    }
+    if (passes.current >= MAX_AUTOFIX_PASSES) return
+    const calls = autofixLayout(
+      ctrl.store.state.document.scene,
+      (id) => backend.measure(id),
+      findings
+    )
+    if (!calls.length) return
+    passes.current++
+    ctrl.dispatch(calls, { source: "user" })
+  }, [enabled, findings, ctrl, backend])
 }
 
 /** Hover affordance — a light outline on the element under the idle pointer,
@@ -259,39 +369,13 @@ function LintOverlay({
   ctrl,
   backend,
   zoom,
+  findings,
 }: {
   ctrl: EditorController
   backend: HtmlCanvasBackend
   zoom: number
+  findings: LintFinding[]
 }) {
-  const state = useEditorState(ctrl)
-  const [findings, setFindings] = useState<LintFinding[]>([])
-  const scene = state.document.scene
-
-  useEffect(() => {
-    let cancelled = false
-    const compute = () => {
-      if (cancelled) return
-      setFindings(
-        lintLayout(ctrl.store.state.document.scene, (id) => backend.measure(id))
-      )
-    }
-    const t = setTimeout(() => {
-      void backend.whenIdle().then(() => {
-        compute()
-        // A late webfont swap reflows boxes without a store change —
-        // recompute once more when fonts finish.
-        if (document.fonts.status === "loading") {
-          void document.fonts.ready.then(compute)
-        }
-      })
-    }, 300)
-    return () => {
-      cancelled = true
-      clearTimeout(t)
-    }
-  }, [scene, backend, ctrl])
-
   if (!findings.length) return null
   const hairline = 1.5 / Math.max(zoom, 0.05)
 

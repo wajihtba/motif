@@ -132,7 +132,6 @@ function presetNaturalDuration(track: AnimTrack): number {
 }
 
 function targetLabel(track: AnimTrack): string {
-  if (track.target.type === "role") return `every ${track.target.role}`
   if (track.target.type === "elements") {
     return track.target.ids.length === 1
       ? `#${track.target.ids[0]}`

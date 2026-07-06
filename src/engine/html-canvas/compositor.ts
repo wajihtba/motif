@@ -119,6 +119,12 @@ export class Compositor {
     }
 
     // --- composite pass -----------------------------------------------------
+    // Units protected from the full-frame passes (plan.protected) are held
+    // back and composited AFTER the post passes: the effect never sees their
+    // pixels, and they draw crisp above the effected frame. They keep their
+    // relative order among themselves (v1 semantics — see effect-plan).
+    const shielded = this.plan?.protected
+    const deferred: PaintUnit[] = []
     ctx.setTransform(1, 0, 0, 1, 0, 0)
     ctx.clearRect(0, 0, W, H)
     if (this.bgEl) draw(this.bgEl, 0, 0)
@@ -129,6 +135,10 @@ export class Compositor {
         continue
       }
       if (!unit.scratch || !unit.captured) continue
+      if (shielded?.has(unit.id)) {
+        deferred.push(unit)
+        continue
+      }
       const s = this.sampler?.(tSec, unit.id) ?? IDENTITY_SAMPLE
       if (s.opacity <= 0) continue
       this.compositeUnit(unit, s, tSec)
@@ -138,6 +148,13 @@ export class Compositor {
     this.applyCanvasChain(tSec)
     this.applySceneChain(tSec)
     this.applyCanvasFilters(tSec)
+
+    // --- protected units, crisp above the effected frame ----------------------
+    for (const unit of deferred) {
+      const s = this.sampler?.(tSec, unit.id) ?? IDENTITY_SAMPLE
+      if (s.opacity <= 0) continue
+      this.compositeUnit(unit, s, tSec)
+    }
   }
 
   /** element-shader/pixel layers addressed at the whole canvas. */
@@ -184,6 +201,7 @@ export class Compositor {
       this.frameCanvas,
       layers.map((l) => ({
         def: l.def,
+        params: new Float32Array(packParams(l.def, l.layer.params)),
         time: l.layer.animate ? tSec : 0,
         pointer: this.pointer,
       })),

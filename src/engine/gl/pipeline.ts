@@ -62,6 +62,7 @@ export interface ChainLayer {
 
 export interface SceneLayer {
   def: SceneShaderDef
+  params: Float32Array
   time: number
   pointer: [number, number]
 }
@@ -311,6 +312,7 @@ export class GlPipeline {
       if (p.uFlip) gl.uniform1f(p.uFlip, last ? 1 : 0)
       if (p.uRes) gl.uniform2f(p.uRes, w, h)
       if (p.uTime) gl.uniform1f(p.uTime, layer.time)
+      if (p.uP && layer.params.length) gl.uniform1fv(p.uP, layer.params)
       if (p.uPointer)
         gl.uniform2f(p.uPointer, layer.pointer[0], layer.pointer[1])
 

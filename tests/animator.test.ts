@@ -130,12 +130,12 @@ describe("animator", () => {
     expect(s.x).toBeCloseTo(15)
   })
 
-  it("role targets fan out with stagger", () => {
+  it("multi-element targets fan out with stagger", () => {
     const compiled = compileAnimations(
       sceneWith([
         {
           id: "t1",
-          target: { type: "role", role: "badge" },
+          target: { type: "elements", ids: ["b", "c"] },
           enabled: true,
           preset: "fadeIn",
           stagger: 0.5,

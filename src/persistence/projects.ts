@@ -4,8 +4,8 @@
 // fine into IndexedDB).
 
 import type { ApiMessage, ChatItem } from "../agent/chat"
-import type { Document } from "../scene/types"
-import { emptyDocument } from "../scene/model"
+import type { Document, FxTarget, Scene } from "../scene/types"
+import { emptyDocument, flatten } from "../scene/model"
 import { db, PROJECT_STORE as STORE } from "./db"
 
 export interface StoredChat {
@@ -46,9 +46,45 @@ export async function listProjects(): Promise<ProjectRecord[]> {
 }
 
 export async function getProject(id: string): Promise<ProjectRecord | null> {
-  return (
+  const record =
     ((await (await db()).get(STORE, id)) as ProjectRecord | undefined) ?? null
-  )
+  if (record) migrateDocument(record.document)
+  return record
+}
+
+/** In-place migrations for records saved by older builds. Currently: the
+ *  document no longer stores role-based FxTargets ("every cta") — resolve any
+ *  legacy `{type:"role"}` target to the matching element ids (or drop the
+ *  layer/track when nothing matches). */
+export function migrateDocument(doc: Document): void {
+  const scene = doc.scene
+  const fix = (target: unknown): FxTarget | null => {
+    const t = target as { type?: string; role?: string } | undefined
+    if (!t || t.type !== "role") return (target as FxTarget) ?? null
+    const ids = flatten(scene.root)
+      .filter((n) => n.role === t.role)
+      .map((n) => n.id)
+    return ids.length ? { type: "elements", ids } : null
+  }
+  migrateTargets(scene, fix)
+}
+
+function migrateTargets(
+  scene: Scene,
+  fix: (t: unknown) => FxTarget | null
+): void {
+  scene.effects = scene.effects.filter((l) => {
+    const t = fix(l.target)
+    if (!t) return false
+    l.target = t
+    return true
+  })
+  scene.animations = scene.animations.filter((tr) => {
+    const t = fix(tr.target)
+    if (!t) return false
+    tr.target = t
+    return true
+  })
 }
 
 export async function putProject(record: ProjectRecord): Promise<void> {

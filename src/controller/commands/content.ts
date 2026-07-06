@@ -34,7 +34,7 @@ export const contentCommands: AnyCommandDef[] = [
         )
       }
       for (const raw of lookToLayers(look)) {
-        const layer = normalizeLayer(raw, { type: "canvas" }, warn)
+        const layer = normalizeLayer(raw, { type: "canvas" }, warn, scene)
         if (layer) scene.effects.push(layer)
       }
       return look.label

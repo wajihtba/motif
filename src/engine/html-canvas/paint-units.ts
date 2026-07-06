@@ -22,8 +22,9 @@
 
 import type { Box } from "../backend"
 import type { FxTarget, Scene, SceneNode } from "../../scene/types"
-import { findNode, nodesByRole, walk } from "../../scene/model"
+import { findNode, walk } from "../../scene/model"
 import { themeVars } from "../../scene/theme"
+import { protectedIds } from "../effect-plan"
 import { buildNodeEl } from "./build"
 
 export interface PaintUnit {
@@ -68,12 +69,10 @@ export interface CompiledUnits {
   els: Map<string, HTMLElement>
 }
 
-/** Resolve an FxTarget to node ids (canvas-wide targets split no units). */
-function targetIds(scene: Scene, target: FxTarget): string[] {
-  if (target.type === "elements") return target.ids
-  if (target.type === "role")
-    return nodesByRole(scene, target.role).map((n) => n.id)
-  return []
+/** Resolve an FxTarget to node ids (canvas-wide targets split no units).
+ *  Role targets resolve to ids at the normalize gate, never here. */
+function targetIds(_scene: Scene, target: FxTarget): string[] {
+  return target.type === "elements" ? target.ids : []
 }
 
 /** The set of node ids that must become their own paint units. */
@@ -87,6 +86,9 @@ export function unitRootIds(scene: Scene): Set<string> {
     if (!layer.enabled || layer.kind === "scene-shader") continue
     for (const id of targetIds(scene, layer.target)) ids.add(id)
   }
+  // Nodes protected from full-frame effect passes must be their own units so
+  // the compositor can draw them crisp ABOVE the scene/canvas chains.
+  for (const id of protectedIds(scene)) ids.add(id)
   ids.delete(scene.root.id) // the root is always the background unit
   // Drop ids that don't exist (the normalize gate repairs most of these
   // upstream; the compiler must still never split on a ghost).

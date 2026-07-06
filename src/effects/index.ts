@@ -11,7 +11,29 @@ import "./pixel"
 import "./filters"
 import "./anims"
 
-import { get } from "./core/registry"
+import { get, setPolicyOverrides } from "./core/registry"
+import { parsePolicyPatch, type EffectPolicyPatch } from "./core/policy"
+
+// --- policy config overrides ------------------------------------------------
+// One JSON text file per effect under ./config, keyed "<kind>.<id>.json"
+// (kind-prefixed because ids may repeat across kinds — the two ditherings do).
+// Lets anyone feature-flag an effect or tune its placement policy without
+// touching shader code. Malformed files warn and are skipped — config must
+// never break registration.
+{
+  const files = import.meta.glob("./config/*.json", {
+    eager: true,
+  }) as Record<string, { default?: unknown }>
+  const overrides = new Map<string, EffectPolicyPatch>()
+  for (const [path, mod] of Object.entries(files)) {
+    const key = path.replace(/^\.\/config\//, "").replace(/\.json$/, "")
+    const patch = parsePolicyPatch(mod.default ?? mod, (msg) =>
+      console.warn(`[effects] config ${key}: ${msg}`)
+    )
+    if (patch) overrides.set(key, patch)
+  }
+  setPolicyOverrides(overrides)
+}
 import type {
   AnimDef,
   ElementShaderDef,
@@ -30,6 +52,8 @@ export {
   groups,
   allEffects,
   supportsOf,
+  policyOf,
+  setPolicyOverrides,
   findEffect,
   EFFECT_KINDS,
   paramDefaults,
@@ -37,6 +61,13 @@ export {
   toolSchema,
   type EffectGroup,
 } from "./core/registry"
+export {
+  mergePolicy,
+  parsePolicyPatch,
+  type EffectPolicy,
+  type EffectPolicyPatch,
+  type FxExcludeSpec,
+} from "./core/policy"
 
 // Animation presets (the engine-driven motion layer; see engine/animator).
 export {

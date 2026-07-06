@@ -1,0 +1,5 @@
+{
+  "defaultExclude": {
+    "roles": ["eyebrow", "headline", "subhead", "cta", "badge", "price", "meta"]
+  }
+}

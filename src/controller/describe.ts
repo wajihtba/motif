@@ -4,14 +4,21 @@
 //   summary       one paragraph: size/format/counts/brief/selection
 //   tree          one line per node: id role tag "text" box layout flags
 //   node          full detail for one node (layout + css + html)
-//   capabilities  the action surface: commands, roles, theme tokens
-//     (effect + anim catalogs join this level as their registries land)
+//   capabilities  the action surface: commands, roles, theme tokens, and the
+//                 effect catalog (id/params/placement policy per effect)
 
 import type { Box } from "../engine/backend"
 import type { EditorState } from "./types"
 import type { SceneNode } from "../scene/types"
 import { findNode, flatten } from "../scene/model"
 import { TOKENS } from "../scene/theme"
+import {
+  allEffects,
+  EFFECT_KINDS,
+  policyOf,
+} from "../effects/core/registry"
+import { ANIM_PRESETS } from "../effects/anims/presets"
+import "../effects" // register the catalogues before any describe call
 import { allCommands } from "./types"
 
 export type DescribeLevel = "summary" | "tree" | "node" | "capabilities"
@@ -154,7 +161,45 @@ function capabilities(state: EditorState): string {
     `roles in scene: ${roles.join(", ") || "(none)"}`,
     `theme tokens: ${TOKENS.map((t) => t.key).join(", ")}`,
     `commands:\n${commands}`,
+    `effects (use with fx.add {effect, kind, target?, scope?, exclude?, params?}):\n${effectCatalog()}`,
+    `anim presets: ${ANIM_PRESETS.map((a) => a.id).join(", ")}`,
   ].join("\n")
+}
+
+/** One compact line per registered effect: id, name, group, params with
+ *  range+default, allowed targets/scopes, and placement policy. Deterministic
+ *  registry order → byte-stable across calls (prompt-cache friendly). */
+function effectCatalog(): string {
+  const lines: string[] = []
+  for (const def of allEffects(EFFECT_KINDS)) {
+    if (def.kind === "anim") continue
+    const p = policyOf(def)
+    const params = def.params
+      .map((x) =>
+        x.type === "color"
+          ? `${x.key}=rgb-int(0x${x.def.toString(16)})`
+          : `${x.key}=${x.def}(${x.min}..${x.max})`
+      )
+      .join(" ")
+    const parts = [
+      `  ${def.kind} ${def.id} "${def.name}" [${def.group}]`,
+      params && `params: ${params}`,
+      `targets:${p.targets.join(",")}`,
+      p.targets.includes("element") && `scopes:${p.scopes.join(",")}`,
+      p.allowRoles?.length && `only-roles:${p.allowRoles.join(",")}`,
+      p.denyRoles?.length && `never-roles:${p.denyRoles.join(",")}`,
+      (p.defaultExclude?.roles?.length || p.defaultExclude?.ids?.length) &&
+        `protects-by-default:${[
+          ...(p.defaultExclude.roles ?? []),
+          ...(p.defaultExclude.ids ?? []),
+        ].join(",")}`,
+    ]
+    lines.push(parts.filter(Boolean).join(" "))
+  }
+  lines.push(
+    "  legend: canvas-target layers accept exclude:{roles?,ids?} — those nodes escape the effect and draw crisp above it; pass exclude:{roles:[]} to disable a default protection. A target {type:'role',role} is resolved to the matching element ids when the command applies (the document stores ids, never roles)."
+  )
+  return lines.join("\n")
 }
 
 const r = (n: number) => Math.round(n)

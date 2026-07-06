@@ -24,6 +24,15 @@ export const textFx: ElementShaderDef[] = [
       },
       { key: "glow", label: "Glow", min: 0, max: 1, step: 0.01, def: 0.6 },
       { key: "jitter", label: "Jitter", min: 0, max: 1, step: 0.01, def: 0.3 },
+      {
+        key: "tint",
+        label: "Tint color",
+        type: "color",
+        min: 0,
+        max: 0xffffff,
+        step: 1,
+        def: 0x59ffff, // holo cyan
+      },
     ],
     frag: `
 vec4 fx(){
@@ -37,7 +46,7 @@ vec4 fx(){
   vec4 cb = texture2D(u_tex, uv - vec2(s, 0.0));
   float a = max(cr.a, max(cg.a, cb.a));
   vec3 col = vec3(cr.r, cg.g, cb.b);
-  vec3 tint = vec3(0.35, 1.0, 1.0);
+  vec3 tint = up_rgb(${P(5)});
   col = mix(col, col * tint + tint * 0.12, 0.65);
   float sl = 0.5 + 0.5 * sin(uv.y * u_res.y * 0.5 - t * 8.0);
   col *= mix(1.0, sl, scan * 0.6);

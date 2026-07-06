@@ -4,7 +4,7 @@
 
 import { z } from "zod"
 import type { AnyCommandDef, EditorState } from "../types"
-import type { AnimTrack, FxTarget } from "../../scene/types"
+import type { AnimTrack, AnimTrackInput, FxTarget } from "../../scene/types"
 import { normalizeTrack } from "../normalize"
 import { zAnimChannel, zTarget } from "../schemas"
 import { CommandAbort, defineCommand } from "../types"
@@ -47,7 +47,12 @@ export const animCommands: AnyCommandDef[] = [
     }),
     invalidates: "stack",
     apply: (draft, args, { warn }) => {
-      const track = normalizeTrack(args, fallbackTarget(draft), warn)
+      const track = normalizeTrack(
+        args,
+        fallbackTarget(draft),
+        warn,
+        draft.document.scene
+      )
       if (!track) {
         throw new CommandAbort(
           `unknown animation preset "${args.preset ?? ""}" and no keyframes given`
@@ -78,14 +83,19 @@ export const animCommands: AnyCommandDef[] = [
     invalidates: "stack",
     apply: (draft, args, { warn }) => {
       const { i, track } = trackAt(draft, args.id)
-      const merged: Partial<AnimTrack> = {
+      const merged: AnimTrackInput = {
         ...track,
         ...args.patch,
         id: track.id,
         preset: track.preset,
         params: { ...track.params, ...(args.patch.params ?? {}) },
       }
-      const next = normalizeTrack(merged, fallbackTarget(draft), warn)
+      const next = normalizeTrack(
+        merged,
+        fallbackTarget(draft),
+        warn,
+        draft.document.scene
+      )
       if (next) draft.document.scene.animations[i] = next
     },
   }),

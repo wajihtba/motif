@@ -5,9 +5,13 @@
 
 import { z } from "zod"
 import type { AnyCommandDef, EditorState } from "../types"
-import type { EffectLayer, FxTarget } from "../../scene/types"
+import type {
+  EffectLayer,
+  EffectLayerInput,
+  FxTarget,
+} from "../../scene/types"
 import { normalizeLayer } from "../normalize"
-import { zTarget } from "../schemas"
+import { zExclude, zTarget } from "../schemas"
 import { CommandAbort, defineCommand } from "../types"
 
 const zScope = z.enum(["box", "content", "text", "image"])
@@ -33,7 +37,7 @@ export const fxCommands: AnyCommandDef[] = [
     title: "Add effect layer",
     group: "Effects",
     description:
-      "Add an effect to a target at a scope. Unknown effect ids are rejected; params are seeded from registry defaults and clamped to range. Target defaults to the current selection (else the canvas). Returns the layer id.",
+      "Add an effect to a target at a scope. Unknown effect ids are rejected; params are seeded from registry defaults and clamped to range. Target defaults to the current selection (else the canvas). Canvas-target (full-frame) effects may carry exclude:{roles?,ids?} — those nodes escape the effect and draw crisp above it; destructive effects auto-protect text/cta roles by policy unless you pass an explicit exclude (use exclude:{roles:[]} to process everything). Returns the layer id.",
     schema: z.object({
       effect: z.string(),
       kind: z
@@ -41,6 +45,7 @@ export const fxCommands: AnyCommandDef[] = [
         .optional(),
       target: zTarget.optional(),
       scope: zScope.optional(),
+      exclude: zExclude.optional(),
       animate: z.boolean().optional(),
       params: z.record(z.string(), z.number()).optional(),
       frag: z
@@ -50,7 +55,12 @@ export const fxCommands: AnyCommandDef[] = [
     }),
     invalidates: "stack",
     apply: (draft, args, { warn }) => {
-      const layer = normalizeLayer(args, fallbackTarget(draft), warn)
+      const layer = normalizeLayer(
+        args,
+        fallbackTarget(draft),
+        warn,
+        draft.document.scene
+      )
       if (!layer) {
         throw new CommandAbort(
           `unknown effect "${args.effect}" — read capabilities via motif_read for the catalog`
@@ -66,7 +76,7 @@ export const fxCommands: AnyCommandDef[] = [
     title: "Update effect layer",
     group: "Effects",
     description:
-      "Patch a layer by id: { params?, target?, scope?, animate?, enabled?, frag? }. Params merge; the result re-passes the gate.",
+      "Patch a layer by id: { params?, target?, scope?, exclude?, animate?, enabled?, frag? }. Params merge, exclude replaces (exclude:{roles:[]} removes all protection); the result re-passes the gate.",
     schema: z.object({
       id: z.string(),
       patch: z
@@ -74,6 +84,7 @@ export const fxCommands: AnyCommandDef[] = [
           params: z.record(z.string(), z.number()).optional(),
           target: zTarget.optional(),
           scope: zScope.optional(),
+          exclude: zExclude.optional(),
           animate: z.boolean().optional(),
           enabled: z.boolean().optional(),
           frag: z.string().optional(),
@@ -83,7 +94,7 @@ export const fxCommands: AnyCommandDef[] = [
     invalidates: "stack",
     apply: (draft, args, { warn }) => {
       const { i, layer } = layerAt(draft, args.id)
-      const merged: Partial<EffectLayer> = {
+      const merged: EffectLayerInput = {
         ...layer,
         ...args.patch,
         id: layer.id,
@@ -91,7 +102,12 @@ export const fxCommands: AnyCommandDef[] = [
         kind: layer.kind,
         params: { ...layer.params, ...(args.patch.params ?? {}) },
       }
-      const next = normalizeLayer(merged, fallbackTarget(draft), warn)
+      const next = normalizeLayer(
+        merged,
+        fallbackTarget(draft),
+        warn,
+        draft.document.scene
+      )
       if (next) draft.document.scene.effects[i] = next
     },
   }),
