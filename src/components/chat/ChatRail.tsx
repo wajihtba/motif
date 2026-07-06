@@ -45,6 +45,7 @@ export function ChatRail({
     () => chat.getSnapshot()
   )
   const [draft, setDraft] = useState("")
+  const [collapsed, setCollapsed] = useState(false)
   const running = snapshot.status === "running"
 
   const send = (text: string) => {
@@ -56,6 +57,25 @@ export function ChatRail({
 
   const empty = snapshot.items.length === 0
 
+  if (collapsed) {
+    return (
+      <div className="flex w-9 shrink-0 flex-col items-center border-r bg-background py-2">
+        <button
+          type="button"
+          title="Show chat"
+          onClick={() => setCollapsed(false)}
+          className="flex size-7 items-center justify-center rounded-sm text-muted-foreground hover:bg-muted hover:text-foreground"
+        >
+          <ChevronRight />
+        </button>
+        {running && <Spinner className="mt-2 size-3.5 text-primary" />}
+        <span className="mt-3 text-[10px] tracking-wider text-muted-foreground [writing-mode:vertical-rl]">
+          CHAT
+        </span>
+      </div>
+    )
+  }
+
   return (
     <aside className="flex w-90 shrink-0 flex-col border-r bg-background">
       <div className="flex h-9 shrink-0 items-center gap-2 border-b px-3">
@@ -63,6 +83,14 @@ export function ChatRail({
           Chat
         </span>
         {running && <Spinner className="size-3.5 text-primary" />}
+        <button
+          type="button"
+          title="Collapse panel"
+          onClick={() => setCollapsed(true)}
+          className="ml-auto flex size-6 items-center justify-center rounded-sm text-muted-foreground hover:bg-muted hover:text-foreground"
+        >
+          <ChevronLeft />
+        </button>
       </div>
 
       {empty ? (
@@ -152,5 +180,43 @@ function EmptyState({ onPick }: { onPick: (text: string) => void }) {
         ))}
       </div>
     </div>
+  )
+}
+
+function ChevronLeft() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+    >
+      <path
+        d="M10 3L5 8l5 5"
+        strokeWidth="1.4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
+function ChevronRight() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+    >
+      <path
+        d="M6 3l5 5-5 5"
+        strokeWidth="1.4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
   )
 }
