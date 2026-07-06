@@ -5,7 +5,9 @@
 import { useEffect, useRef, useState } from "react"
 import { createFileRoute, useNavigate } from "@tanstack/react-router"
 import type { ProjectRecord } from "@/persistence/projects"
+import { ScenePreview } from "@/components/ScenePreview"
 import { Button } from "@/components/ui/button"
+import { seedGallery } from "@/content/gallery-seed"
 import {
   Dialog,
   DialogContent,
@@ -43,7 +45,10 @@ function HomePage() {
   const refresh = () => {
     void listProjects().then(setProjects)
   }
-  useEffect(refresh, [])
+  // First-visit: seed the curated example gallery, then load the grid.
+  useEffect(() => {
+    void seedGallery().then(refresh)
+  }, [])
 
   const open = (id: string) => {
     void navigate({ to: "/editor/$projectId", params: { projectId: id } })
@@ -197,7 +202,7 @@ function ProjectCard({
               className="max-h-full max-w-full object-contain"
             />
           ) : (
-            <span className="text-xs text-muted-foreground">No preview</span>
+            <ScenePreview scene={project.document.scene} />
           )}
         </div>
       </button>
