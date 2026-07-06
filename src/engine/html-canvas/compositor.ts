@@ -253,12 +253,19 @@ export class Compositor {
     }
   }
 
-  /** Paint one unit alone into the owner canvas and copy it out to scratch. */
+  /** Paint one unit alone into the owner canvas and copy it out to scratch.
+   *  For isolated units unit.el is the transparent ink-padded wrapper (see
+   *  paint-units): drawing it at (0,0) lands its border box — which equals its
+   *  visual box, since the wrapper casts no shadow of its own — at the origin,
+   *  with the unit's own shadow painting into the pad instead of being clipped.
+   *  The scratch matches the wrapper size; the unit sits at (ink.l, ink.t)
+   *  inside it, which compositeUnit reads back to place the unit exactly. */
   private capture(unit: PaintUnit): void {
     const { ctx, draw, dpr } = this
     if (!draw) return
-    const dw = Math.max(1, toDevice(unit.box.w, dpr))
-    const dh = Math.max(1, toDevice(unit.box.h, dpr))
+    const { ink } = unit
+    const dw = Math.max(1, toDevice(ink.l + unit.box.w + ink.r, dpr))
+    const dh = Math.max(1, toDevice(ink.t + unit.box.h + ink.b, dpr))
     ctx.setTransform(1, 0, 0, 1, 0, 0)
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height)
     draw(unit.el, 0, 0)
@@ -279,14 +286,23 @@ export class Compositor {
     const dw = scratch.width
     const dh = scratch.height
 
+    // The scratch is grown by the unit's ink overflow, so its center is NOT the
+    // border-box center; the border box sits at (ink.l, ink.t) inside it. Draw
+    // so that the border-box center lands on the rotate/scale pivot (the frame
+    // box center), keeping shadowed and shadowless units placed identically.
+    const { ink } = unit
+    const ox = toDevice(ink.l + unit.box.w / 2, dpr)
+    const oy = toDevice(ink.t + unit.box.h / 2, dpr)
+
     let source: CanvasImageSource = scratch
     const fx = this.plan?.perUnit.get(unit.id)
     if (fx?.chain.length) {
       const gl = this.pipeline()
       if (gl) {
-        // In-frame backdrop: the frame accumulated SO FAR under the unit box.
-        const bx = toDevice(unit.box.x, dpr)
-        const by = toDevice(unit.box.y, dpr)
+        // In-frame backdrop: the frame accumulated SO FAR under the padded
+        // scratch region (its top-left is ink.l/ink.t above/left of the box).
+        const bx = toDevice(unit.box.x - ink.l, dpr)
+        const by = toDevice(unit.box.y - ink.t, dpr)
         sizeCanvas(this.backCanvas, dw, dh)
         const bctx = this.backCanvas.getContext("2d")!
         bctx.clearRect(0, 0, dw, dh)
@@ -322,12 +338,12 @@ export class Compositor {
         ctx.shadowBlur = sh.blur
         ctx.shadowOffsetX = sh.x
         ctx.shadowOffsetY = sh.y
-        ctx.drawImage(source, -dw / 2, -dh / 2)
+        ctx.drawImage(source, -ox, -oy)
         ctx.restore()
       }
       ctx.filter = rest
     }
-    ctx.drawImage(source, -dw / 2, -dh / 2)
+    ctx.drawImage(source, -ox, -oy)
     ctx.restore()
   }
 

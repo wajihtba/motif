@@ -30,7 +30,13 @@ import { classifyPatches, nodeForId, restyleEl } from "./dom-patch"
 import { currentDpr, sizeSceneCanvas } from "./dpr"
 import { FrameLoop } from "./loop"
 import { MeasurementHost } from "./measure"
-import { compileUnits, pinUnitEl, unitRootIds } from "./paint-units"
+import {
+  compileUnits,
+  inkOverflow,
+  pinUnitContent,
+  pinUnitEl,
+  unitRootIds,
+} from "./paint-units"
 
 /** Frame-budget watchdog config (docs/plan/03-agent-first.md §5): two
  *  consecutive frames over budget auto-disable custom-GLSL layers. */
@@ -123,7 +129,8 @@ export class HtmlCanvasBackend implements RendererBackend {
       scene,
       this.canvas,
       (id) => boxes.get(id) ?? null,
-      this.canvasImages.trackImage
+      this.canvasImages.trackImage,
+      (id) => this.computedOf(id)
     )
     this.compositor.setContent(
       this.compiled.bgEl,
@@ -132,6 +139,13 @@ export class HtmlCanvasBackend implements RendererBackend {
     )
     this.replan()
     this.loop.domMutated()
+  }
+
+  /** Resolved computed style of a node's measurement-host copy — feeds the
+   *  ink-overflow margins so shadows/filters aren't clipped by the scratch. */
+  private computedOf(id: string): CSSStyleDeclaration | null {
+    const el = this.measurement.elOf(id)
+    return el ? getComputedStyle(el) : null
   }
 
   /** Recompute the effect plan + animations + loop continuity. */
@@ -311,11 +325,14 @@ export class HtmlCanvasBackend implements RendererBackend {
     const canvasEl = this.compiled?.els.get(id)
     if (canvasEl) {
       const unit = this.compiled?.units.find((u) => u.id === id)
-      restyleEl(
-        canvasEl,
-        node,
-        unit ? (el) => pinUnitEl(el, unit.box) : undefined
-      )
+      // restyleEl wipes cssText, so re-pin: isolated units live inside a
+      // wrapper (positioned by ink), the background unit at the origin.
+      const pin = unit
+        ? unit.isolated
+          ? (el: HTMLElement) => pinUnitContent(el, unit.box, unit.ink)
+          : (el: HTMLElement) => pinUnitEl(el, unit.box)
+        : undefined
+      restyleEl(canvasEl, node, pin)
     }
   }
 
@@ -388,7 +405,8 @@ export class HtmlCanvasBackend implements RendererBackend {
       scene,
       this.canvas,
       (id) => boxes.get(id) ?? null,
-      this.canvasImages.trackImage
+      this.canvasImages.trackImage,
+      (id) => this.computedOf(id)
     )
     this.compositor.setContent(
       this.compiled.bgEl,
@@ -444,8 +462,13 @@ export class HtmlCanvasBackend implements RendererBackend {
       const b = boxes.get(unit.id)
       if (b && unit.isolated) {
         unit.box = b
-        unit.el.style.width = `${b.w}px`
-        unit.el.style.height = `${b.h}px`
+        // A restyle/content change may have moved the box or the shadow —
+        // recompute ink, reposition the inner element, resize the wrapper.
+        unit.ink = inkOverflow(this.computedOf(unit.id))
+        const inner = this.compiled.els.get(unit.id)
+        if (inner) pinUnitContent(inner, b, unit.ink)
+        unit.el.style.width = `${unit.ink.l + b.w + unit.ink.r}px`
+        unit.el.style.height = `${unit.ink.t + b.h + unit.ink.b}px`
       }
       unit.captured = false
     }

@@ -143,10 +143,11 @@ describe("incremental dom-patch", () => {
         ],
       },
     })
-    // h1 became its own paint unit (immediate canvas child), and the root
-    // unit keeps a hidden hole in its place
+    // h1 became its own paint unit: an immediate canvas child (the transparent
+    // ink-overflow wrapper) whose subtree holds h1, and the root unit keeps a
+    // hidden hole in its place
     const unitEl = [...backend.canvas.children].find(
-      (c) => (c as HTMLElement).dataset.id === "h1"
+      (c) => (c as HTMLElement).querySelector('[data-id="h1"]') !== null
     )
     expect(unitEl).toBeTruthy()
     expect(backend.canvas.querySelector('[data-hole="h1"]')).not.toBeNull()
