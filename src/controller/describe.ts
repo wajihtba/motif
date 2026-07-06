@@ -94,6 +94,7 @@ function nodeLine(
     n.hidden && "[hidden]",
     n.locked && "[locked]",
     n.allowOverlap && "[overlap-ok]",
+    n.allowLowContrast && "[low-contrast-ok]",
   ]
   return parts.filter(Boolean).join(" ")
 }

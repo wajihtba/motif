@@ -18,6 +18,10 @@ import type { ApiMessage, ChatStore } from "./chat"
 import { brandDigest } from "../brand/digest"
 import { exportImage } from "../engine/export"
 import { lintLayout, lintText } from "../controller/lint"
+import { autofixContrast } from "../controller/contrast-autofix"
+import { lintContrastAfterSettle } from "../controller/contrast-check"
+import { contrastText } from "../controller/contrast-lint"
+import { cssColorToRgba } from "../lib/css-color"
 import { contextBlock } from "./prompts"
 import { parsePartialJson } from "./partial-json"
 
@@ -58,6 +62,8 @@ export class AgentSession {
   private sceneChanged = false
   /** The one automatic repair request per send() has been spent. */
   private repairAttempted = false
+  /** Nodes already given their one automatic contrast fix this send(). */
+  private contrastFixAttempted = new Set<string>()
 
   constructor(private deps: AgentSessionDeps) {}
 
@@ -75,6 +81,7 @@ export class AgentSession {
     this.abortController = new AbortController()
     this.sceneChanged = false
     this.repairAttempted = false
+    this.contrastFixAttempted.clear()
     chat.addText("user", userText)
     chat.apiMessages.push({
       role: "user",
@@ -321,33 +328,74 @@ export class AgentSession {
       content: [
         {
           type: "text",
-          text: `(automatic layout check) unresolved layout warnings:\n${lines.join(
+          text: `(automatic design check) unresolved warnings:\n${lines.join(
             "\n"
-          )}\nFix them now with motif_edit — or set allowOverlap: true on nodes whose layering is intentional.`,
+          )}\nFix them now with motif_edit — or mark what is intentional (allowOverlap: true for layering, allowLowContrast: true for decorative low-contrast text).`,
         },
       ],
     })
     return true
   }
 
-  /** Measure-based layout lint, run after the applied scene settles (images
-   *  decoded, fonts swapped, boxes fresh). Never throws — a lint failure must
-   *  not break the tool loop. Returns `layout:` warning lines. */
+  /** Measure-based layout + contrast lint, run after the applied scene
+   *  settles (images decoded, fonts swapped, boxes fresh). Never throws — a
+   *  lint failure must not break the tool loop. Returns `layout:` and
+   *  `contrast:` warning lines. */
   private async lintAfterSettle(): Promise<string[]> {
     try {
       if (this.deps.lint) return await this.deps.lint()
-      const backend = this.deps.ctrl.backendRef
+      const { ctrl } = this.deps
+      const backend = ctrl.backendRef
       if (!backend) return []
       await Promise.race([
         document.fonts.ready,
         new Promise((r) => setTimeout(r, 500)),
       ])
       await backend.whenIdle()
-      return lintText(
-        lintLayout(this.deps.ctrl.store.state.document.scene, (id) =>
-          backend.measure(id)
-        )
+      const measure = (id: string) => backend.measure(id)
+      const contrastDeps = () => ({
+        scene: ctrl.store.state.document.scene,
+        measure,
+        probe: (id: string) => backend.probeStyle!(id),
+        revision: ctrl.history.lastSeq,
+      })
+      const lines = lintText(
+        lintLayout(ctrl.store.state.document.scene, measure)
       )
+      if (backend.probeStyle) {
+        let findings = await lintContrastAfterSettle(contrastDeps())
+        // Deterministic repair first: color-only ("safe") fixes are applied
+        // outright — the model only hears about what math can't settle. Each
+        // node gets ONE automatic attempt per send(): a fix that didn't stick
+        // must not be re-tried on every subsequent tool call (churn), it must
+        // ride the warnings to the model instead.
+        const fixable = findings.filter(
+          (f) => !this.contrastFixAttempted.has(f.ids[0])
+        )
+        if (fixable.length) {
+          const calls = autofixContrast(
+            ctrl.store.state.document.scene,
+            measure,
+            fixable,
+            cssColorToRgba,
+            "safe"
+          )
+          if (calls.length) {
+            const res = ctrl.dispatch(calls, {
+              source: "agent",
+              label: "Contrast auto-fix",
+            })
+            if (res.ok) {
+              for (const f of fixable) this.contrastFixAttempted.add(f.ids[0])
+              this.lastSeenSeq = ctrl.history.lastSeq
+              await backend.whenIdle()
+              findings = await lintContrastAfterSettle(contrastDeps())
+            }
+          }
+        }
+        lines.push(...contrastText(findings))
+      }
+      return lines
     } catch {
       return []
     }

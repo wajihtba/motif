@@ -338,7 +338,7 @@ describe("agent loop (recorded streams)", () => {
     const repair = chat.apiMessages.find(
       (m) =>
         m.role === "user" &&
-        JSON.stringify(m.content).includes("(automatic layout check)")
+        JSON.stringify(m.content).includes("(automatic design check)")
     )
     expect(repair).toBeTruthy()
     expect(JSON.stringify(repair!.content)).toContain("allowOverlap")
@@ -365,7 +365,7 @@ describe("agent loop (recorded streams)", () => {
     await session.send("make something")
     expect(
       chat.apiMessages.some((m) =>
-        JSON.stringify(m.content).includes("(automatic layout check)")
+        JSON.stringify(m.content).includes("(automatic design check)")
       )
     ).toBe(false)
   })

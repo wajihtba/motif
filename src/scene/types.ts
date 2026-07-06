@@ -116,6 +116,9 @@ export interface SceneNode {
    *  overlap lint. Scrims/badges over images never need it; set it only for
    *  deliberate content-on-content overlap (type lockups etc.). */
   allowOverlap?: boolean
+  /** Intentional low-contrast text (ghosted watermarks, decorative type) —
+   *  opts this node (and its subtree) out of the contrast lint. */
+  allowLowContrast?: boolean
 }
 
 /** shadcn-style design tokens, applied as CSS custom properties on the scene root. */

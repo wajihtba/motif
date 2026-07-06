@@ -127,6 +127,7 @@ export function EditorShell({
             ctrl={ctrl}
             backend={backend}
             hover={hover}
+            session={session}
             onViewport={setViewport}
           />
           {budgetOpen && <BudgetOverlay backend={backend} />}

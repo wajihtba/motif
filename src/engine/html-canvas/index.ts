@@ -14,6 +14,7 @@ import type { Scene, SceneNode } from "../../scene/types"
 import type {
   Box,
   EnginePatch,
+  ProbedStyle,
   RendererBackend,
   RendererCapabilities,
   UnitSampler,
@@ -154,6 +155,28 @@ export class HtmlCanvasBackend implements RendererBackend {
   private computedOf(id: string): CSSStyleDeclaration | null {
     const el = this.measurement.elOf(id)
     return el ? getComputedStyle(el) : null
+  }
+
+  /** Resolved computed style for the contrast lint — inheritance, var(--token)
+   *  and scene.stylesheet all applied by the browser on the measurement copy. */
+  probeStyle(id: string): ProbedStyle | null {
+    const s = this.computedOf(id)
+    if (!s) return null
+    const clip =
+      s.getPropertyValue("-webkit-background-clip") || s.backgroundClip
+    return {
+      color: s.color,
+      fontSizePx: Number.parseFloat(s.fontSize) || 16,
+      fontWeight: Number.parseFloat(s.fontWeight) || 400,
+      opacity: Number.parseFloat(s.opacity),
+      backgroundColor: s.backgroundColor,
+      backgroundImage: s.backgroundImage || "none",
+      textShadow: s.textShadow || "none",
+      textStrokeWidthPx:
+        Number.parseFloat(s.getPropertyValue("-webkit-text-stroke-width")) || 0,
+      textStrokeColor: s.getPropertyValue("-webkit-text-stroke-color"),
+      backgroundClipText: clip.includes("text"),
+    }
   }
 
   /** Recompute the effect plan + animations + loop continuity. */

@@ -108,6 +108,7 @@ export const zSceneNode: z.ZodType<Partial<SceneNode>> = z.lazy(() =>
       hidden: z.boolean().optional(),
       locked: z.boolean().optional(),
       allowOverlap: z.boolean().optional(),
+      allowLowContrast: z.boolean().optional(),
     })
     .loose()
 ) as z.ZodType<Partial<SceneNode>>

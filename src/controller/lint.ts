@@ -14,7 +14,7 @@ import type { Box } from "../engine/backend"
 import type { Scene, SceneNode } from "../scene/types"
 
 export interface LintFinding {
-  kind: "overlap" | "frame-overflow" | "container-overflow"
+  kind: "overlap" | "frame-overflow" | "container-overflow" | "low-contrast"
   ids: string[]
   /** One compact line, ready for the agent diff / UI chip. */
   message: string
@@ -204,7 +204,7 @@ export function lintText(findings: LintFinding[], max = 6): string[] {
 
 // --- classification -----------------------------------------------------------
 
-function isTextBearing(n: SceneNode): boolean {
+export function isTextBearing(n: SceneNode): boolean {
   if (n.children?.length) return false
   const text = (n.html ?? "")
     .replace(/<[^>]+>/g, " ")

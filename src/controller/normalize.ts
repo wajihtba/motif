@@ -174,6 +174,7 @@ export function normalizeNode(
     hidden: raw.hidden,
     locked: raw.locked,
     allowOverlap: raw.allowOverlap === true ? true : undefined,
+    allowLowContrast: raw.allowLowContrast === true ? true : undefined,
   })
   if (Array.isArray(raw.children) && raw.children.length) {
     n.children = raw.children.map((c) => normalizeNode(c, warn))

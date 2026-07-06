@@ -65,6 +65,25 @@ export function detectCapabilities(): RendererCapabilities {
   return { liveCanvas, shaders, video }
 }
 
+/** Resolved computed style of a node — read off the measurement host, so
+ *  inheritance, var(--token) and scene.stylesheet are all applied. Consumed by
+ *  the contrast lint (controller/contrast-lint.ts); injectable there so tests
+ *  run without a DOM. */
+export interface ProbedStyle {
+  color: string
+  fontSizePx: number
+  fontWeight: number
+  opacity: number
+  backgroundColor: string
+  /** "none" or the computed image list (gradient/url). */
+  backgroundImage: string
+  textShadow: string
+  textStrokeWidthPx: number
+  textStrokeColor: string
+  /** background-clip: text — gradient-filled type. */
+  backgroundClipText: boolean
+}
+
 /** Structurally identical to immer's Patch — declared here so the engine
  *  interface doesn't import a state library. */
 export interface EnginePatch {
@@ -94,6 +113,9 @@ export interface RendererBackend {
   renderFrame: (tSec: number) => void
   /** Measured box of a node in scene px (from the measurement pass). */
   measure: (id: string) => Box | null
+  /** Resolved computed style of a node (contrast lint). Optional — a backend
+   *  without a live DOM copy may not support it. */
+  probeStyle?: (id: string) => ProbedStyle | null
   /** Resolves when images are loaded, paint records settled, loop parked. */
   whenIdle: () => Promise<void>
   dispose: () => void

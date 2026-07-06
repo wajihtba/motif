@@ -308,6 +308,21 @@ export const elementCommands: AnyCommandDef[] = [
   }),
 
   defineCommand({
+    id: "element.setAllowLowContrast",
+    title: "Allow low contrast",
+    group: "Element",
+    description:
+      "Mark text as intentionally low-contrast (ghosted/decorative type) — suppresses contrast warnings for it and its subtree.",
+    schema: z.object({ id: zId, allow: z.boolean() }),
+    invalidates: "none",
+    apply: (draft, args, { warn }) => {
+      const n = target(draft, args.id, warn)
+      if (args.allow) n.allowLowContrast = true
+      else delete n.allowLowContrast
+    },
+  }),
+
+  defineCommand({
     id: "element.select",
     title: "Select element(s)",
     group: "Element",

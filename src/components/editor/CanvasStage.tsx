@@ -3,13 +3,21 @@
 // mounts into a ref'd div once; overlays are plain absolutely-positioned
 // React elements in scene px that ride the viewport transform.
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
+import { toast } from "sonner"
+import type { AgentSession } from "@/agent/loop"
 import type { EditorController } from "@/controller"
+import type { ContrastFinding } from "@/controller/contrast-lint"
 import type { LintFinding } from "@/controller/lint"
 import type { HtmlCanvasBackend } from "@/engine/html-canvas"
 import type { SnapGuide } from "@/engine/snap"
 import type { TopBarViewport } from "./TopBar"
 import { autofixLayout } from "@/controller/autofix"
+import {
+  lintContrastAfterSettle,
+  runContrastFixSession,
+} from "@/controller/contrast-check"
+import { contrastFixPrompt } from "@/controller/contrast-lint"
 import { lintLayout } from "@/controller/lint"
 import { Interaction } from "@/engine/interaction"
 import type { Handle } from "@/engine/resize"
@@ -25,11 +33,15 @@ export function CanvasStage({
   ctrl,
   backend,
   hover,
+  session,
   onViewport,
 }: {
   ctrl: EditorController
   backend: HtmlCanvasBackend
   hover: HoverStore
+  /** Agent session for the "Fix with AI" contrast action (optional — the
+   *  button hides without it). */
+  session?: AgentSession
   onViewport: (vp: TopBarViewport) => void
 }) {
   const vpRef = useRef<HTMLDivElement>(null)
@@ -41,9 +53,48 @@ export function CanvasStage({
   const [guides, setGuides] = useState<SnapGuide[]>([])
   const state = useEditorState(ctrl)
   const scene = state.document.scene
-  const findings = useLintFindings(ctrl, backend)
+  const { layout: layoutFindings, contrast: contrastFindings } =
+    useLintFindings(ctrl, backend)
+  const findings = useMemo<LintFinding[]>(
+    () => [...layoutFindings, ...contrastFindings],
+    [layoutFindings, contrastFindings]
+  )
   const [autoFix, setAutoFix] = useState(false)
-  useAutofix(ctrl, backend, findings, autoFix)
+  useAutofix(ctrl, backend, layoutFindings, autoFix)
+  const [fixingContrast, setFixingContrast] = useState(false)
+
+  // One-shot, bounded, explicitly invoked — structurally cannot loop: each
+  // node gets its ladder rung once, the terminal halo once, then it's left
+  // flagged for the human/LLM.
+  const fixContrast = () => {
+    if (fixingContrast) return
+    setFixingContrast(true)
+    void runContrastFixSession({ ctrl, backend })
+      .then(({ attempted, remaining }) => {
+        if (!remaining.length) {
+          toast.success(
+            attempted
+              ? `Fixed ${attempted} readability issue${attempted === 1 ? "" : "s"}`
+              : "Contrast is clean"
+          )
+        } else {
+          toast.warning(
+            `${remaining.length} issue${remaining.length === 1 ? "" : "s"} need${remaining.length === 1 ? "s" : ""} a design decision — try “Fix with AI”`
+          )
+        }
+      })
+      .finally(() => setFixingContrast(false))
+  }
+
+  const fixContrastWithAI = () => {
+    if (!session || !contrastFindings.length) return
+    if (session.running) {
+      toast.info("The assistant is busy — try again when it finishes")
+      return
+    }
+    void session.send(contrastFixPrompt(contrastFindings))
+    toast.info("Sent the readability issues to the assistant")
+  }
 
   useEffect(() => {
     const vpEl = vpRef.current
@@ -189,8 +240,8 @@ export function CanvasStage({
           {scene.baseWidth} × {scene.baseHeight} · {scene.format}
         </div>
       </div>
-      {/* screen-space (outside the viewport transform): lint status + the
-          auto-fix toggle. While ON, fresh warnings are resolved on sight. */}
+      {/* screen-space (outside the viewport transform): lint status, the
+          layout auto-fix toggle, and the one-shot contrast fix actions. */}
       {(findings.length > 0 || autoFix) && (
         <div
           data-motif="autofix-toggle"
@@ -199,51 +250,95 @@ export function CanvasStage({
           <span
             className={
               findings.length
-                ? "text-[oklch(0.76_0.16_70)]"
+                ? contrastFindings.length
+                  ? "text-[oklch(0.6_0.21_25)]"
+                  : "text-[oklch(0.76_0.16_70)]"
                 : "text-muted-foreground"
             }
           >
             {findings.length
-              ? `⚠ ${findings.length} layout warning${findings.length > 1 ? "s" : ""}`
-              : "Layout clean"}
+              ? `⚠ ${
+                  layoutFindings.length ? `${layoutFindings.length} layout` : ""
+                }${layoutFindings.length && contrastFindings.length ? " · " : ""}${
+                  contrastFindings.length
+                    ? `${contrastFindings.length} readability`
+                    : ""
+                }`
+              : "Design clean"}
           </span>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={autoFix}
-            onClick={() => setAutoFix((v) => !v)}
-            className={`rounded-full px-2.5 py-1 font-medium transition-colors ${
-              autoFix
-                ? "bg-primary text-primary-foreground"
-                : "bg-muted text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            Auto-fix {autoFix ? "on" : "off"}
-          </button>
+          {(layoutFindings.length > 0 || autoFix) && (
+            <button
+              type="button"
+              role="switch"
+              aria-checked={autoFix}
+              onClick={() => setAutoFix((v) => !v)}
+              className={`rounded-full px-2.5 py-1 font-medium transition-colors ${
+                autoFix
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-muted text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              Fix layout {autoFix ? "on" : "off"}
+            </button>
+          )}
+          {contrastFindings.length > 0 && (
+            <button
+              type="button"
+              data-motif="contrast-fix"
+              disabled={fixingContrast}
+              onClick={fixContrast}
+              className="rounded-full bg-muted px-2.5 py-1 font-medium text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
+            >
+              {fixingContrast ? "Fixing…" : "Fix contrast"}
+            </button>
+          )}
+          {contrastFindings.length > 0 && session && (
+            <button
+              type="button"
+              data-motif="contrast-fix-ai"
+              onClick={fixContrastWithAI}
+              className="rounded-full bg-muted px-2.5 py-1 font-medium text-muted-foreground transition-colors hover:text-foreground"
+            >
+              Fix with AI
+            </button>
+          )}
         </div>
       )}
     </div>
   )
 }
 
-/** The same layout lint the agent sees, recomputed against MEASURED boxes
- *  whenever the scene settles (debounced past the engine's paint + webfont
- *  swaps). Single source for the badges overlay and the auto-fix loop. */
+/** The same layout + contrast lint the agent sees, recomputed against
+ *  MEASURED boxes whenever the scene settles (debounced past the engine's
+ *  paint + webfont swaps). Layout findings land synchronously; contrast
+ *  findings (which may pixel-sample a hidden export frame) resolve async.
+ *  Kept as SEPARATE lists: layout feeds the reactive auto-fix toggle,
+ *  contrast feeds the one-shot fix buttons — merging them once let the
+ *  briefly-empty async gap reset the toggle's pass cap and loop the fixer. */
 function useLintFindings(
   ctrl: EditorController,
   backend: HtmlCanvasBackend
-): LintFinding[] {
+): { layout: LintFinding[]; contrast: ContrastFinding[] } {
   const state = useEditorState(ctrl)
   const scene = state.document.scene
-  const [findings, setFindings] = useState<LintFinding[]>([])
+  const [layout, setLayout] = useState<LintFinding[]>([])
+  const [contrast, setContrast] = useState<ContrastFinding[]>([])
 
   useEffect(() => {
     let cancelled = false
     const compute = () => {
       if (cancelled) return
-      setFindings(
-        lintLayout(ctrl.store.state.document.scene, (id) => backend.measure(id))
-      )
+      const current = ctrl.store.state.document.scene
+      const measure = (id: string) => backend.measure(id)
+      setLayout(lintLayout(current, measure))
+      void lintContrastAfterSettle({
+        scene: current,
+        measure,
+        probe: (id) => backend.probeStyle(id),
+        revision: ctrl.history.lastSeq,
+      }).then((next) => {
+        if (!cancelled) setContrast(next)
+      })
     }
     const t = setTimeout(() => {
       void backend.whenIdle().then(() => {
@@ -261,13 +356,16 @@ function useLintFindings(
     }
   }, [scene, backend, ctrl])
 
-  return findings
+  return { layout, contrast }
 }
 
-/** While the toggle is ON, resolve fresh lint findings automatically. Each
+/** While the toggle is ON, resolve fresh LAYOUT findings automatically. Each
  *  dispatch reflows the scene and re-runs the lint, so this converges as a
  *  fix→measure→fix loop — capped per warning burst so an unfixable finding
- *  (or two stubborn boxes trading places) can never ping-pong forever. */
+ *  (or two stubborn boxes trading places) can never ping-pong forever.
+ *  Contrast findings are deliberately NOT handled here: they resolve async,
+ *  and feeding them into a reactive loop resets the cap on every gap — the
+ *  one-shot fix session (contrast-check.ts) owns those. */
 const MAX_AUTOFIX_PASSES = 4
 
 function useAutofix(
@@ -381,9 +479,17 @@ function LintOverlay({
   if (!findings.length) return null
   const hairline = 1.5 / Math.max(zoom, 0.05)
 
+  // Layout warnings are amber; readability (contrast) warnings are red —
+  // they're the "this text can't be read" class, one step more severe.
+  const tint = (kind: LintFinding["kind"]) =>
+    kind === "low-contrast" ? "oklch(0.6 0.21 25)" : "oklch(0.76 0.16 70)"
+
   // One outline per offending node; one badge per finding, fanned out when
   // several findings share an anchor node.
   const flagged = new Set(findings.flatMap((f) => f.ids))
+  const contrastFlagged = new Set(
+    findings.filter((f) => f.kind === "low-contrast").flatMap((f) => f.ids)
+  )
   const slots = new Map<string, number>()
   const badges = findings.map((f) => {
     const slot = slots.get(f.ids[0]) ?? 0
@@ -406,7 +512,11 @@ function LintOverlay({
               top: box.y,
               width: box.w,
               height: box.h,
-              outline: `${hairline}px dashed oklch(0.76 0.16 70)`,
+              outline: `${hairline}px dashed ${
+                contrastFlagged.has(id)
+                  ? "oklch(0.6 0.21 25)"
+                  : "oklch(0.76 0.16 70)"
+              }`,
               outlineOffset: hairline * 2,
             }}
           />
@@ -430,8 +540,11 @@ function LintOverlay({
               borderRadius: 8 / zoom,
               fontSize: 11 / zoom,
               lineHeight: 1,
-              background: "oklch(0.76 0.16 70)",
-              color: "oklch(0.2 0.02 70)",
+              background: tint(f.kind),
+              color:
+                f.kind === "low-contrast"
+                  ? "oklch(0.98 0.01 25)"
+                  : "oklch(0.2 0.02 70)",
               border: "none",
               cursor: "pointer",
             }}
