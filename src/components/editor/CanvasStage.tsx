@@ -62,6 +62,8 @@ export function CanvasStage({
         height: ctrl.store.state.document.scene.baseHeight,
       }),
       onChange: (z) => setZoom(z),
+      onBlankPress: () =>
+        ctrl.dispatch([{ command: "element.select", args: { ids: null } }]),
     })
     const interaction = new Interaction({
       stage: backend.stage,

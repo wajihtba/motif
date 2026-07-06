@@ -8,6 +8,8 @@ export interface ViewportDeps {
   /** Scene size to fit (reads live — format switches change it). */
   size: () => { width: number; height: number }
   onChange: (zoom: number) => void
+  /** Plain left-press on the empty well (not artboard, not overlay chrome). */
+  onBlankPress?: () => void
 }
 
 export class Viewport {
@@ -128,8 +130,22 @@ export class Viewport {
   }
 
   private onDown = (e: PointerEvent) => {
-    const onArt = (e.target as HTMLElement).closest('[data-motif="stage"]')
+    const target = e.target as HTMLElement
+    // Overlay chrome (resize handles, lint buttons, the inline text editor)
+    // sits OUTSIDE the artboard element, so the !onArt test below would treat
+    // a press on it as an empty-well pan. Their stopPropagation can't save us
+    // — this native listener fires on the ancestor before React's synthetic
+    // handlers run — so bail explicitly.
+    const onChrome = target.closest(
+      '[data-resize-handle], button, input, textarea, [contenteditable="true"]'
+    )
+    if (onChrome) return
+    const onArt = target.closest('[data-motif="stage"]')
     const wantPan = e.button === 1 || this.space || (e.button === 0 && !onArt)
+    // A plain click on the empty well (no pan modifier) also clears the
+    // selection — the artboard's own empty-click deselect can't see presses
+    // out here.
+    if (e.button === 0 && !onArt && !this.space) this.deps.onBlankPress?.()
     if (!wantPan) return // artboard press → Interaction handles it
     e.preventDefault()
     this.panning = true
