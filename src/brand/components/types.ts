@@ -23,6 +23,9 @@ export type ComponentGroup =
   | "Lists"
   | "Data & Price"
   | "Decor & Frames"
+  | "Shapes"
+  | "Backgrounds"
+  | "Overlays & FX"
   | "Logo"
 
 /** One choice on a variant axis. `css` (when present) is patched onto the

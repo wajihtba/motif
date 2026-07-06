@@ -37,3 +37,25 @@ export const photoPlaceholder: Record<string, string> = {
   background:
     "linear-gradient(135deg, var(--primary) 0%, var(--accent-2) 60%, var(--accent) 100%)",
 }
+
+/** Encode an inline SVG as a css-safe data URI (the sanitizer allows
+ *  url(data:image/…); external url() is stripped). */
+export function svgUrl(svg: string): string {
+  return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`
+}
+
+/** THE creative unlock for brand-adaptive artwork: use an arbitrary SVG
+ *  silhouette as a mask and let plain CSS (var(--token) gradients/colors)
+ *  provide the fill. The shape can be anything; the color stays live-themed —
+ *  unlike baking colors into an SVG data URI, which would freeze the brand. */
+export function svgMask(svg: string): Record<string, string> {
+  const url = svgUrl(svg)
+  return {
+    maskImage: url,
+    WebkitMaskImage: url,
+    maskRepeat: "no-repeat",
+    WebkitMaskRepeat: "no-repeat",
+    maskSize: "100% 100%",
+    WebkitMaskSize: "100% 100%",
+  }
+}
