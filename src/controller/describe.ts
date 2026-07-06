@@ -19,6 +19,10 @@ import {
 } from "../effects/core/registry"
 import { ANIM_PRESETS } from "../effects/anims/presets"
 import "../effects" // register the catalogues before any describe call
+import {
+  componentCatalogLine,
+  list as listComponents,
+} from "../brand/components" // barrel import registers the component catalog
 import { allCommands } from "./types"
 
 export type DescribeLevel = "summary" | "tree" | "node" | "capabilities"
@@ -163,7 +167,16 @@ function capabilities(state: EditorState): string {
     `commands:\n${commands}`,
     `effects (use with fx.add {effect, kind, target?, scope?, exclude?, params?}):\n${effectCatalog()}`,
     `anim presets: ${ANIM_PRESETS.map((a) => a.id).join(", ")}`,
+    `brand components (use with component.insert {component, content?, variants?, layout?, parentId?}):\n${componentCatalog()}`,
   ].join("\n")
+}
+
+/** One compact line per registered brand component: id, name, group, slots,
+ *  variant axes. Deterministic registry order → byte-stable. */
+function componentCatalog(): string {
+  return listComponents()
+    .map((def) => `  ${componentCatalogLine(def)}`)
+    .join("\n")
 }
 
 /** One compact line per registered effect: id, name, group, params with

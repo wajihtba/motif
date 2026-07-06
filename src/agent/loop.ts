@@ -15,6 +15,7 @@
 
 import type { EditorController, CommandCall } from "../controller"
 import type { ApiMessage, ChatStore } from "./chat"
+import { brandDigest } from "../brand/digest"
 import { exportImage } from "../engine/export"
 import { lintLayout, lintText } from "../controller/lint"
 import { contextBlock } from "./prompts"
@@ -142,26 +143,14 @@ export class AgentSession {
     const last = messages[messages.length - 1]
     if (last.role === "user") {
       const state = ctrl.store.state
-      const kit = state.document.brandKit
+      const brand = state.document.brand
       last.content.push({
         type: "text",
         text: contextBlock({
           summary: ctrl.describe({ level: "summary" }),
           selection: state.selection,
           userEdits: this.userEditsSince(),
-          brand: kit
-            ? [
-                Object.entries(kit.palette)
-                  .map(([k, v]) => `${k}=${v}`)
-                  .join(" "),
-                kit.fontHeading && `heading=${kit.fontHeading}`,
-                kit.fontBody && `body=${kit.fontBody}`,
-                kit.voice && `voice: ${kit.voice}`,
-                kit.logo && `logo: ${kit.logo}`,
-              ]
-                .filter(Boolean)
-                .join(" · ")
-            : undefined,
+          brand: brand ? brandDigest(brand) : undefined,
         }),
       })
     }

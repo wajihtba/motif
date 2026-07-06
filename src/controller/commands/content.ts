@@ -1,10 +1,11 @@
-// Content commands: looks (one-click stacked aesthetics), the brand kit, and
-// per-format variant overrides. All curated data flows through the same gate
-// as agent input — looks are just fx layer bundles tagged owner:'look'.
+// Content commands: looks (one-click stacked aesthetics) and per-format
+// variant overrides. All curated data flows through the same gate as agent
+// input — looks are just fx layer bundles tagged owner:'look'. (Brand
+// commands live in ./brand.)
 
 import { z } from "zod"
 import type { AnyCommandDef } from "../types"
-import type { BrandKit, VariantOverride } from "../../scene/types"
+import type { VariantOverride } from "../../scene/types"
 import { FORMATS } from "../../content/formats"
 import { LOOKS, lookByName, lookToLayers } from "../../content/looks"
 import { normalizeLayer } from "../normalize"
@@ -38,40 +39,6 @@ export const contentCommands: AnyCommandDef[] = [
         if (layer) scene.effects.push(layer)
       }
       return look.label
-    },
-  }),
-
-  defineCommand({
-    id: "brand.apply",
-    title: "Apply brand kit",
-    group: "Document",
-    description:
-      "Set the brand kit (palette tokens, fonts, voice, asset:-referenced logo) and compile it into the scene theme. Palette keys are theme tokens (--primary, --accent, --ink, …).",
-    schema: z.object({
-      palette: z.record(z.string(), z.string()).optional(),
-      fontHeading: z.string().optional(),
-      fontBody: z.string().optional(),
-      voice: z.string().optional(),
-      logo: z.string().optional(),
-    }),
-    invalidates: "style",
-    apply: (draft, args) => {
-      const prev = draft.document.brandKit
-      const kit: BrandKit = {
-        palette: { ...(prev?.palette ?? {}), ...(args.palette ?? {}) },
-        fontHeading: args.fontHeading ?? prev?.fontHeading,
-        fontBody: args.fontBody ?? prev?.fontBody,
-        voice: args.voice ?? prev?.voice,
-        logo: args.logo ?? prev?.logo,
-      }
-      draft.document.brandKit = kit
-      // Compile into theme tokens — one edit re-skins the whole design.
-      const tokens = draft.document.scene.theme.tokens
-      for (const [key, value] of Object.entries(kit.palette)) {
-        if (key.startsWith("--")) tokens[key] = value
-      }
-      if (kit.fontHeading) tokens["--font-heading"] = kit.fontHeading
-      if (kit.fontBody) tokens["--font-body"] = kit.fontBody
     },
   }),
 

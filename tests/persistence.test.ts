@@ -94,7 +94,7 @@ describe("assetIdsIn", () => {
         image: "asset:hero-photo", // duplicate reference
       },
     ]
-    doc.brandKit = { palette: {}, logo: "asset:brand-logo" }
+    doc.brand = { tokens: {}, components: {}, motion: {}, logo: "asset:brand-logo" }
     expect(assetIdsIn(doc).sort()).toEqual([
       "bg-texture",
       "brand-logo",

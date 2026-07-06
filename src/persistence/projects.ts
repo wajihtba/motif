@@ -4,7 +4,8 @@
 // fine into IndexedDB).
 
 import type { ApiMessage, ChatItem } from "../agent/chat"
-import type { Document, FxTarget, Scene } from "../scene/types"
+import type { BrandKit, Document, FxTarget, Scene } from "../scene/types"
+import { snapshotFromKit } from "../brand/compile"
 import { emptyDocument, flatten } from "../scene/model"
 import { db, PROJECT_STORE as STORE } from "./db"
 
@@ -52,11 +53,16 @@ export async function getProject(id: string): Promise<ProjectRecord | null> {
   return record
 }
 
-/** In-place migrations for records saved by older builds. Currently: the
- *  document no longer stores role-based FxTargets ("every cta") — resolve any
- *  legacy `{type:"role"}` target to the matching element ids (or drop the
- *  layer/track when nothing matches). */
+/** In-place migrations for records saved by older builds.
+ *  - legacy `{type:"role"}` FxTargets resolve to element ids (or drop);
+ *  - the old `brandKit` lifts into the BrandSnapshot shape (stays ad-hoc —
+ *    no library record is minted; the user links a brand explicitly). */
 export function migrateDocument(doc: Document): void {
+  const legacy = doc as Document & { brandKit?: BrandKit }
+  if (legacy.brandKit && !doc.brand) {
+    doc.brand = snapshotFromKit(legacy.brandKit)
+    delete legacy.brandKit
+  }
   const scene = doc.scene
   const fix = (target: unknown): FxTarget | null => {
     const t = target as { type?: string; role?: string } | undefined

@@ -27,7 +27,7 @@ import {
 } from "@/components/ui/select"
 import { FORMATS, formatByKey } from "@/content/formats"
 import { useEditorState } from "@/hooks/use-document-store"
-import { BrandKitDialog } from "./BrandKitDialog"
+import { BrandMenu } from "./BrandMenu"
 
 export interface TopBarViewport {
   zoom: number
@@ -126,7 +126,7 @@ export function TopBar({
             ))}
           </SelectContent>
         </Select>
-        <BrandKitDialog ctrl={ctrl} />
+        <BrandMenu ctrl={ctrl} />
         {saver && <SaveBadge saver={saver} />}
 
         <div className="flex-1" />

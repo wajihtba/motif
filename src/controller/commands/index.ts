@@ -4,6 +4,7 @@
 // whatever is registered.
 
 import { registerCommands } from "../types"
+import { brandCommands } from "./brand"
 import { contentCommands } from "./content"
 import { docCommands } from "./doc"
 import { animCommands } from "./anim"
@@ -23,5 +24,6 @@ export function registerCoreCommands(): void {
   registerCommands(fxCommands)
   registerCommands(animCommands)
   registerCommands(contentCommands)
+  registerCommands(brandCommands)
   registerCommands(docCommands)
 }

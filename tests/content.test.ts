@@ -156,7 +156,7 @@ describe("brand kit", () => {
     })
     expect(r.ok).toBe(true)
     const doc = ctrl.store.state.document
-    expect(doc.brandKit?.voice).toBe("warm, confident")
+    expect(doc.brand?.voice).toBe("warm, confident")
     expect(doc.scene.theme.tokens["--primary"]).toBe("oklch(0.7 0.2 40)")
     expect(doc.scene.theme.tokens["--ink"]).toBe("#fff8ee")
     expect(doc.scene.theme.tokens["--font-heading"]).toBe("'Fraunces', serif")

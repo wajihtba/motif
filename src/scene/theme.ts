@@ -7,7 +7,7 @@
 
 import type { Theme } from "./types"
 
-export type TokenType = "color" | "length" | "font"
+export type TokenType = "color" | "length" | "font" | "shadow"
 
 /** Token catalogue — drives the Theme panel UI and the agent's describe() vocab. */
 export interface TokenDef {
@@ -35,6 +35,8 @@ export const TOKENS: TokenDef[] = [
   { key: "--font-heading", label: "Heading font", type: "font", group: "type" },
   { key: "--font-body", label: "Body font", type: "font", group: "type" },
   { key: "--radius", label: "Radius", type: "length", group: "shape" },
+  { key: "--shadow", label: "Shadow", type: "shadow", group: "shape" },
+  { key: "--space", label: "Spacing unit", type: "length", group: "shape" },
 ]
 
 export const DEFAULT_THEME: Theme = {
@@ -52,6 +54,8 @@ export const DEFAULT_THEME: Theme = {
     "--font-heading": "'Playfair Display', Georgia, serif",
     "--font-body": "'Plus Jakarta Sans', system-ui, sans-serif",
     "--radius": "18px",
+    "--shadow": "0 24px 60px rgba(0,0,0,0.35)",
+    "--space": "16px",
   },
 }
 

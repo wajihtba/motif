@@ -5,7 +5,10 @@
 import { useEffect, useState } from "react"
 import { createFileRoute } from "@tanstack/react-router"
 import type { RendererCapabilities } from "@/engine/backend"
+import type { Document } from "@/scene/types"
 import { AgentSession, httpTransport } from "@/agent/loop"
+import { compileBrand } from "@/brand/compile"
+import { getBrand } from "@/persistence/brands"
 import { ChatStore } from "@/agent/chat"
 import { EditorShell } from "@/components/editor/EditorShell"
 import { UnsupportedGate } from "@/components/editor/UnsupportedGate"
@@ -51,6 +54,7 @@ function EditorPage() {
       await ensureGalleryAssets()
       await primeAssets()
       const record = await loadOrCreateProject(projectId)
+      await syncBrandSnapshot(record.document)
       if (life.disposed) return
       // Hydrate BEFORE the shell mounts: attachBackend paints the loaded doc.
       ctrl.load(record.document)
@@ -99,6 +103,25 @@ function EditorPage() {
       projectId={projectId}
     />
   )
+}
+
+/** Re-sync the document's brand snapshot from the library record when the
+ *  record changed since the snapshot was compiled. A deleted brand keeps the
+ *  snapshot but drops the pointer (the design keeps working). */
+async function syncBrandSnapshot(document: Document): Promise<void> {
+  const snap = document.brand
+  if (!snap?.brandId) return
+  const brand = await getBrand(snap.brandId)
+  if (!brand) {
+    delete snap.brandId
+    return
+  }
+  if (brand.updatedAt === snap.syncedAt) return
+  document.brand = compileBrand(brand)
+  // Same merge brand.apply performs — tokens land on the scene theme.
+  for (const [key, value] of Object.entries(document.brand.tokens)) {
+    document.scene.theme.tokens[key] = value
+  }
 }
 
 function downloadBlob(blob: Blob, filename: string): void {

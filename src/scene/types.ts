@@ -19,6 +19,7 @@
 // node `css` can reference var(--primary) etc. Everything is plain JSON: an
 // agent can emit a whole scene and the editor serialises / restores it.
 
+import type { BrandSnapshot } from "../brand/types"
 import type { Layout } from "./layout"
 
 // --- effects vocabulary (data side; the registry in src/effects consumes it) --
@@ -253,13 +254,16 @@ export interface Document {
   /** The canonical scene all format variants derive from. */
   scene: Scene
   formats: FormatVariant[]
-  /** Brand identity (M6): compiled into theme tokens + the agent context.
-   *  Conceptually project-level; it rides the document until M7's project
-   *  persistence lifts it. */
-  brandKit?: BrandKit
+  /** The linked brand, compiled to a self-contained snapshot (tokens,
+   *  component overrides, motion) so commands and the agent read it
+   *  synchronously. `brandId` points into the global brand library; the
+   *  snapshot re-syncs from the record on project open. */
+  brand?: BrandSnapshot
 }
 
-/** Brand identity compiled into scene theme tokens + the agent system prompt. */
+/** Legacy brand identity (pre-brand-library documents). Migrated to
+ *  Document.brand by persistence/projects.migrateDocument; kept only for
+ *  that shim's typing. */
 export interface BrandKit {
   /** `asset:<id>` reference into the project asset store. */
   logo?: string
