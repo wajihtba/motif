@@ -5,9 +5,12 @@
 
 import { describe, expect, it } from "vitest"
 import type { AgentTransport, SseEvent } from "@/agent/loop"
+import type { Box, RendererBackend } from "@/engine/backend"
+import { DEFAULT_GUARD_CONFIG } from "@/controller/guard/types"
 import { EditorController } from "@/controller"
 import { AgentSession, httpTransport } from "@/agent/loop"
 import { ChatStore } from "@/agent/chat"
+import { findNode } from "@/scene/model"
 import { mockEvents } from "@/agent/mock-stream"
 
 void httpTransport // exercised in the browser; tests inject transports
@@ -389,5 +392,125 @@ describe("agent loop (recorded streams)", () => {
     const toolResult = chat.apiMessages[2].content[0] as { content: string }
     expect(toolResult.content).toContain("#h1")
     expect(toolResult.content).toContain("role=headline")
+  })
+})
+
+describe("agent loop — design-guard pass (real backend measure path)", () => {
+  // jsdom has no FontFaceSet — lintAfterSettle races document.fonts.ready,
+  // so give it a resolved stand-in (the DOM lib types hide the gap, hence
+  // no existence check).
+  Object.defineProperty(document, "fonts", {
+    value: { ready: Promise.resolve() },
+    configurable: true,
+  })
+
+  /** Minimal RendererBackend whose measure() mirrors the current normalized
+   *  dx/dy — a setLayout nudge "sticks" exactly as a live renderer would. */
+  function stubBackend(
+    ctrl: EditorController,
+    initBoxes: Record<string, Box | undefined>
+  ): RendererBackend {
+    return {
+      capabilities: { liveCanvas: false, shaders: false, video: false },
+      stage: document.createElement("div"),
+      mount: () => {},
+      setScene: () => {},
+      setSampler: () => {},
+      setContinuous: () => {},
+      invalidate: () => {},
+      renderFrame: () => {},
+      measure: (id) => {
+        const init = initBoxes[id]
+        if (!init) return null
+        const n = findNode(ctrl.store.state.document.scene, id)
+        const layout = n?.layout as { dx?: number; dy?: number } | undefined
+        return {
+          x: init.x + (layout?.dx ?? 0) * 1080,
+          y: init.y + (layout?.dy ?? 0) * 1080,
+          w: init.w,
+          h: init.h,
+        }
+      },
+      whenIdle: () => Promise.resolve(),
+      dispose: () => {},
+    }
+  }
+
+  it("deterministic layout fix applies silently; the model sees no warnings", async () => {
+    const ctrl = new EditorController()
+    const backend = stubBackend(ctrl, {
+      a: { x: 100, y: 100, w: 400, h: 120 },
+      b: { x: 120, y: 180, w: 400, h: 60 }, // 40px collision with a
+    })
+    ctrl.attachBackend(backend)
+    const chat = new ChatStore()
+    const session = new AgentSession({
+      ctrl,
+      chat,
+      transport: scriptedTransport([
+        toolUseRound("motif_generate", {
+          root: {
+            children: [
+              { id: "a", role: "headline", html: "Hi" },
+              { id: "b", role: "subhead", html: "There" },
+            ],
+          },
+        }),
+        textRound("Done."),
+      ]),
+      guardConfig: () => ({ ...DEFAULT_GUARD_CONFIG, agentAutofix: true }),
+    })
+    await session.send("make something")
+
+    // The fix landed as its own history entry…
+    const fixEntry = ctrl.history
+      .since(0)
+      .find((e) => e.label === "Design auto-fix")
+    expect(fixEntry).toBeTruthy()
+    // …the tool result carried no layout warnings…
+    const toolResult = chat.apiMessages[2].content[0] as { content: string }
+    expect(toolResult.content).not.toContain("layout:")
+    // …and no repair round was requested.
+    expect(
+      chat.apiMessages.some((m) =>
+        JSON.stringify(m.content).includes("(automatic design check)")
+      )
+    ).toBe(false)
+  })
+
+  it("agentAutofix off: warnings ride to the model instead", async () => {
+    const ctrl = new EditorController()
+    const backend = stubBackend(ctrl, {
+      a: { x: 100, y: 100, w: 400, h: 120 },
+      b: { x: 120, y: 180, w: 400, h: 60 },
+    })
+    ctrl.attachBackend(backend)
+    const chat = new ChatStore()
+    const session = new AgentSession({
+      ctrl,
+      chat,
+      transport: scriptedTransport([
+        toolUseRound("motif_generate", {
+          root: {
+            children: [
+              { id: "a", role: "headline", html: "Hi" },
+              { id: "b", role: "subhead", html: "There" },
+            ],
+          },
+        }),
+        textRound("Done."),
+        textRound("Keeping the layout."), // repair round answer
+      ]),
+      guardConfig: () => ({ ...DEFAULT_GUARD_CONFIG, agentAutofix: false }),
+    })
+    await session.send("make something")
+
+    const fixEntry = ctrl.history
+      .since(0)
+      .find((e) => e.label === "Design auto-fix")
+    expect(fixEntry).toBeUndefined()
+    const toolResult = chat.apiMessages[2].content[0] as { content: string }
+    expect(toolResult.content).toContain("layout:")
+    expect(toolResult.content).toContain("overlaps")
   })
 })

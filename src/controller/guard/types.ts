@@ -107,8 +107,6 @@ export interface GuardConfig {
 export const DEFAULT_GUARD_CONFIG: GuardConfig = {
   version: 1,
   rules: {},
-  // Off until the agent-loop convergence pass lands (phase 2 of the guard
-  // rollout) — keeps the registry refactor behavior-neutral.
-  agentAutofix: false,
+  agentAutofix: true,
   visionJudge: { enabled: false },
 }
