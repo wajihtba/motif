@@ -15,13 +15,11 @@
 
 import type { EditorController, CommandCall } from "../controller"
 import type { ApiMessage, ChatStore } from "./chat"
+import type { GuardConfig } from "../controller/guard/types"
 import { brandDigest } from "../brand/digest"
 import { exportImage } from "../engine/export"
-import { lintLayout, lintText } from "../controller/lint"
-import { autofixContrast } from "../controller/contrast-autofix"
-import { lintContrastAfterSettle } from "../controller/contrast-check"
-import { contrastText } from "../controller/contrast-lint"
-import { cssColorToRgba } from "../lib/css-color"
+import { runGuardPass } from "../controller/guard/run"
+import { getGuardConfig } from "../persistence/settings"
 import { contextBlock } from "./prompts"
 import { parsePartialJson } from "./partial-json"
 
@@ -52,6 +50,9 @@ export interface AgentSessionDeps {
    *  after a scene-changing call settles. Injectable for headless tests; the
    *  default measures the live backend (lintAfterSettle). */
   lint?: () => Promise<string[]>
+  /** Guard config source — injectable for tests; defaults to the persisted
+   *  app settings (src/persistence/settings.ts). */
+  guardConfig?: () => GuardConfig
 }
 
 export class AgentSession {
@@ -64,6 +65,9 @@ export class AgentSession {
   private repairAttempted = false
   /** Nodes already given their one automatic contrast fix this send(). */
   private contrastFixAttempted = new Set<string>()
+  /** Finding keys (`rule:ids`) already given their one deterministic layout
+   *  fix this send() — a fix that didn't stick rides to the model instead. */
+  private guardFixAttempted = new Set<string>()
 
   constructor(private deps: AgentSessionDeps) {}
 
@@ -82,6 +86,7 @@ export class AgentSession {
     this.sceneChanged = false
     this.repairAttempted = false
     this.contrastFixAttempted.clear()
+    this.guardFixAttempted.clear()
     chat.addText("user", userText)
     chat.apiMessages.push({
       role: "user",
@@ -337,10 +342,12 @@ export class AgentSession {
     return true
   }
 
-  /** Measure-based layout + contrast lint, run after the applied scene
-   *  settles (images decoded, fonts swapped, boxes fresh). Never throws — a
-   *  lint failure must not break the tool loop. Returns `layout:` and
-   *  `contrast:` warning lines. */
+  /** Measure-based design-guard pass, run after the applied scene settles
+   *  (images decoded, fonts swapped, boxes fresh): every enabled rule lints,
+   *  deterministic fixes apply where math can settle the issue (bounded,
+   *  once per finding per send — see controller/guard/run.ts), and what's
+   *  left returns as `layout:` / `contrast:` warning lines. Never throws — a
+   *  lint failure must not break the tool loop. */
   private async lintAfterSettle(): Promise<string[]> {
     try {
       if (this.deps.lint) return await this.deps.lint()
@@ -352,49 +359,16 @@ export class AgentSession {
         new Promise((r) => setTimeout(r, 500)),
       ])
       await backend.whenIdle()
-      const measure = (id: string) => backend.measure(id)
-      const contrastDeps = () => ({
-        scene: ctrl.store.state.document.scene,
-        measure,
-        probe: (id: string) => backend.probeStyle!(id),
-        revision: ctrl.history.lastSeq,
+      const { lines } = await runGuardPass({
+        ctrl,
+        backend,
+        config: (this.deps.guardConfig ?? getGuardConfig)(),
+        fixAttempted: this.guardFixAttempted,
+        contrastFixAttempted: this.contrastFixAttempted,
+        onFixed: () => {
+          this.lastSeenSeq = ctrl.history.lastSeq
+        },
       })
-      const lines = lintText(
-        lintLayout(ctrl.store.state.document.scene, measure)
-      )
-      if (backend.probeStyle) {
-        let findings = await lintContrastAfterSettle(contrastDeps())
-        // Deterministic repair first: color-only ("safe") fixes are applied
-        // outright — the model only hears about what math can't settle. Each
-        // node gets ONE automatic attempt per send(): a fix that didn't stick
-        // must not be re-tried on every subsequent tool call (churn), it must
-        // ride the warnings to the model instead.
-        const fixable = findings.filter(
-          (f) => !this.contrastFixAttempted.has(f.ids[0])
-        )
-        if (fixable.length) {
-          const calls = autofixContrast(
-            ctrl.store.state.document.scene,
-            measure,
-            fixable,
-            cssColorToRgba,
-            "safe"
-          )
-          if (calls.length) {
-            const res = ctrl.dispatch(calls, {
-              source: "agent",
-              label: "Contrast auto-fix",
-            })
-            if (res.ok) {
-              for (const f of fixable) this.contrastFixAttempted.add(f.ids[0])
-              this.lastSeenSeq = ctrl.history.lastSeq
-              await backend.whenIdle()
-              findings = await lintContrastAfterSettle(contrastDeps())
-            }
-          }
-        }
-        lines.push(...contrastText(findings))
-      }
       return lines
     } catch {
       return []

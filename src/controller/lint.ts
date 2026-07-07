@@ -126,16 +126,15 @@ export function boxesCollide(
   return true
 }
 
-export function lintLayout(
-  scene: Scene,
-  measure: (id: string) => Box | null,
+/** Content-on-content overlap over a prepared entry set. Exported for the
+ *  guard registry (guard/rules/core.ts) — lintLayout composes these three
+ *  checks with identical output. */
+export function checkOverlap(
+  entries: LintEntry[],
   opts: LintOptions = {}
 ): LintFinding[] {
   const o = { ...DEFAULTS, ...opts }
-  const entries = collectEntries(scene, measure)
   const findings: LintFinding[] = []
-
-  // 1. content-on-content overlap ------------------------------------------
   for (let i = 0; i < entries.length; i++) {
     for (let j = i + 1; j < entries.length; j++) {
       const a = entries[i]
@@ -151,8 +150,15 @@ export function lintLayout(
       })
     }
   }
+  return findings
+}
 
-  // 2. text overflowing the canvas frame ------------------------------------
+/** Text overflowing the canvas frame. */
+export function checkFrameOverflow(
+  entries: LintEntry[],
+  scene: Scene
+): LintFinding[] {
+  const findings: LintFinding[] = []
   for (const e of entries) {
     if (!e.text) continue
     const over = frameOverhang(e.box, scene.baseWidth, scene.baseHeight)
@@ -164,8 +170,12 @@ export function lintLayout(
       })
     }
   }
+  return findings
+}
 
-  // 3. text spilling out of its own card -------------------------------------
+/** Text spilling out of its own card. */
+export function checkContainerOverflow(entries: LintEntry[]): LintFinding[] {
+  const findings: LintFinding[] = []
   for (const e of entries) {
     if (!e.text || !e.container) continue
     if (e.ancestorIds.has(e.container.n.id)) {
@@ -185,8 +195,20 @@ export function lintLayout(
       }
     }
   }
-
   return findings
+}
+
+export function lintLayout(
+  scene: Scene,
+  measure: (id: string) => Box | null,
+  opts: LintOptions = {}
+): LintFinding[] {
+  const entries = collectEntries(scene, measure)
+  return [
+    ...checkOverlap(entries, opts),
+    ...checkFrameOverflow(entries, scene),
+    ...checkContainerOverflow(entries),
+  ]
 }
 
 /** Findings → capped `layout:` lines for the agent diff / tool chip. */
