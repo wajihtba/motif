@@ -28,6 +28,7 @@ import {
 import { FORMATS, formatByKey } from "@/content/formats"
 import { useEditorState } from "@/hooks/use-document-store"
 import { BrandMenu } from "./BrandMenu"
+import { DesignGuardMenu } from "./DesignGuardMenu"
 
 export interface TopBarViewport {
   zoom: number
@@ -127,6 +128,7 @@ export function TopBar({
           </SelectContent>
         </Select>
         <BrandMenu ctrl={ctrl} />
+        <DesignGuardMenu />
         {saver && <SaveBadge saver={saver} />}
 
         <div className="flex-1" />

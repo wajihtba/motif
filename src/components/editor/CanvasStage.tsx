@@ -8,17 +8,23 @@ import { toast } from "sonner"
 import type { AgentSession } from "@/agent/loop"
 import type { EditorController } from "@/controller"
 import type { ContrastFinding } from "@/controller/contrast-lint"
-import type { LintFinding } from "@/controller/lint"
+import type { GuardConfig, GuardFinding } from "@/controller/guard/types"
 import type { HtmlCanvasBackend } from "@/engine/html-canvas"
 import type { SnapGuide } from "@/engine/snap"
 import type { TopBarViewport } from "./TopBar"
-import { autofixLayout } from "@/controller/autofix"
+import {
+  buildRuleContext,
+  guardAutofix,
+  isRuleEnabled,
+  ruleById,
+  runSyncRules,
+} from "@/controller/guard/registry"
 import {
   lintContrastAfterSettle,
   runContrastFixSession,
 } from "@/controller/contrast-check"
 import { contrastFixPrompt } from "@/controller/contrast-lint"
-import { lintLayout } from "@/controller/lint"
+import { useGuardConfig } from "@/hooks/use-guard-config"
 import { Interaction } from "@/engine/interaction"
 import type { Handle } from "@/engine/resize"
 import { CURSOR, HANDLES } from "@/engine/resize"
@@ -28,6 +34,14 @@ import type { HoverStore } from "@/hooks/use-hover"
 import { useEditorState } from "@/hooks/use-document-store"
 import { useHoverId } from "@/hooks/use-hover"
 import { InlineTextEditor } from "./InlineTextEditor"
+
+/** What the overlay needs from a finding — guard findings and contrast
+ *  findings both satisfy it (kind drives the tint only). */
+interface OverlayFinding {
+  kind: string
+  ids: string[]
+  message: string
+}
 
 export function CanvasStage({
   ctrl,
@@ -53,14 +67,15 @@ export function CanvasStage({
   const [guides, setGuides] = useState<SnapGuide[]>([])
   const state = useEditorState(ctrl)
   const scene = state.document.scene
+  const guardConfig = useGuardConfig()
   const { layout: layoutFindings, contrast: contrastFindings } =
-    useLintFindings(ctrl, backend)
-  const findings = useMemo<LintFinding[]>(
+    useLintFindings(ctrl, backend, guardConfig)
+  const findings = useMemo<OverlayFinding[]>(
     () => [...layoutFindings, ...contrastFindings],
     [layoutFindings, contrastFindings]
   )
   const [autoFix, setAutoFix] = useState(false)
-  useAutofix(ctrl, backend, layoutFindings, autoFix)
+  useAutofix(ctrl, backend, layoutFindings, autoFix, guardConfig)
   const [fixingContrast, setFixingContrast] = useState(false)
 
   // One-shot, bounded, explicitly invoked — structurally cannot loop: each
@@ -317,11 +332,12 @@ export function CanvasStage({
  *  briefly-empty async gap reset the toggle's pass cap and loop the fixer. */
 function useLintFindings(
   ctrl: EditorController,
-  backend: HtmlCanvasBackend
-): { layout: LintFinding[]; contrast: ContrastFinding[] } {
+  backend: HtmlCanvasBackend,
+  config: GuardConfig
+): { layout: GuardFinding[]; contrast: ContrastFinding[] } {
   const state = useEditorState(ctrl)
   const scene = state.document.scene
-  const [layout, setLayout] = useState<LintFinding[]>([])
+  const [layout, setLayout] = useState<GuardFinding[]>([])
   const [contrast, setContrast] = useState<ContrastFinding[]>([])
 
   useEffect(() => {
@@ -330,15 +346,22 @@ function useLintFindings(
       if (cancelled) return
       const current = ctrl.store.state.document.scene
       const measure = (id: string) => backend.measure(id)
-      setLayout(lintLayout(current, measure))
-      void lintContrastAfterSettle({
-        scene: current,
-        measure,
-        probe: (id) => backend.probeStyle(id),
-        revision: ctrl.history.lastSeq,
-      }).then((next) => {
-        if (!cancelled) setContrast(next)
+      const ctx = buildRuleContext(current, measure, {
+        probeScroll: (id) => backend.probeScroll(id),
       })
+      setLayout(runSyncRules(ctx, config))
+      if (isRuleEnabled(ruleById("low-contrast")!, config)) {
+        void lintContrastAfterSettle({
+          scene: current,
+          measure,
+          probe: (id) => backend.probeStyle(id),
+          revision: ctrl.history.lastSeq,
+        }).then((next) => {
+          if (!cancelled) setContrast(next)
+        })
+      } else {
+        setContrast([])
+      }
     }
     const t = setTimeout(() => {
       void backend.whenIdle().then(() => {
@@ -354,25 +377,28 @@ function useLintFindings(
       cancelled = true
       clearTimeout(t)
     }
-  }, [scene, backend, ctrl])
+  }, [scene, backend, ctrl, config])
 
   return { layout, contrast }
 }
 
-/** While the toggle is ON, resolve fresh LAYOUT findings automatically. Each
- *  dispatch reflows the scene and re-runs the lint, so this converges as a
- *  fix→measure→fix loop — capped per warning burst so an unfixable finding
- *  (or two stubborn boxes trading places) can never ping-pong forever.
- *  Contrast findings are deliberately NOT handled here: they resolve async,
- *  and feeding them into a reactive loop resets the cap on every gap — the
- *  one-shot fix session (contrast-check.ts) owns those. */
+/** While the toggle is ON, resolve fresh SYNC-rule findings automatically
+ *  (overlap/overflow nudges, spacing equalization, alignment snaps, edge
+ *  clamps — whatever guardAutofix can settle). Each dispatch reflows the
+ *  scene and re-runs the lint, so this converges as a fix→measure→fix loop
+ *  — capped per warning burst so an unfixable finding (or two stubborn
+ *  boxes trading places) can never ping-pong forever. Contrast findings are
+ *  deliberately NOT handled here: they resolve async, and feeding them into
+ *  a reactive loop resets the cap on every gap — the one-shot fix session
+ *  (contrast-check.ts) owns those. */
 const MAX_AUTOFIX_PASSES = 4
 
 function useAutofix(
   ctrl: EditorController,
   backend: HtmlCanvasBackend,
-  findings: LintFinding[],
-  enabled: boolean
+  findings: GuardFinding[],
+  enabled: boolean,
+  config: GuardConfig
 ) {
   const passes = useRef(0)
   useEffect(() => {
@@ -381,15 +407,16 @@ function useAutofix(
       return
     }
     if (passes.current >= MAX_AUTOFIX_PASSES) return
-    const calls = autofixLayout(
+    const ctx = buildRuleContext(
       ctrl.store.state.document.scene,
       (id) => backend.measure(id),
-      findings
+      { probeScroll: (id) => backend.probeScroll(id) }
     )
+    const calls = guardAutofix(findings, ctx, config)
     if (!calls.length) return
     passes.current++
     ctrl.dispatch(calls, { source: "user" })
-  }, [enabled, findings, ctrl, backend])
+  }, [enabled, findings, ctrl, backend, config])
 }
 
 /** Hover affordance — a light outline on the element under the idle pointer,
@@ -462,7 +489,7 @@ function GuideOverlay({ guides, zoom }: { guides: SnapGuide[]; zoom: number }) {
   )
 }
 
-/** Overlap/overflow badges — the same layout lint the agent sees, surfaced on
+/** Guard badges — the same design-guard findings the agent sees, surfaced on
  *  canvas. Advisory only: outlines never intercept the pointer (dragging an
  *  element apart clears them live); the corner badge selects the offenders. */
 function LintOverlay({
@@ -474,14 +501,14 @@ function LintOverlay({
   ctrl: EditorController
   backend: HtmlCanvasBackend
   zoom: number
-  findings: LintFinding[]
+  findings: OverlayFinding[]
 }) {
   if (!findings.length) return null
   const hairline = 1.5 / Math.max(zoom, 0.05)
 
   // Layout warnings are amber; readability (contrast) warnings are red —
   // they're the "this text can't be read" class, one step more severe.
-  const tint = (kind: LintFinding["kind"]) =>
+  const tint = (kind: string) =>
     kind === "low-contrast" ? "oklch(0.6 0.21 25)" : "oklch(0.76 0.16 70)"
 
   // One outline per offending node; one badge per finding, fanned out when
