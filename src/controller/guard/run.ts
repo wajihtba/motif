@@ -65,7 +65,10 @@ export async function runGuardPass(
       probeStyle: backend.probeStyle
         ? (id) => backend.probeStyle!(id)
         : undefined,
-      probeScroll: backend.probeScroll,
+      // Wrapped, not passed raw — a bare method reference loses its `this`.
+      probeScroll: backend.probeScroll
+        ? (id) => backend.probeScroll!(id)
+        : undefined,
       revision: ctrl.history.lastSeq,
     })
 
