@@ -32,10 +32,15 @@ import {
   overlapRule,
 } from "./rules/core"
 import { contrastRule } from "./rules/contrast"
+import { edgeMarginRule } from "./rules/edge-margin"
+import { spacingRhythmRule } from "./rules/spacing-rhythm"
+import { alignmentRule } from "./rules/alignment"
 
 export const DESIGN_RULES: DesignRule[] = [
-  // guard-native rules register here as they land (edge-margin, text-clip,
-  // spacing-rhythm, alignment — phases 3–4 of the rollout).
+  edgeMarginRule,
+  // text-clip lands here (phase 4 of the rollout).
+  spacingRhythmRule,
+  alignmentRule,
   overlapRule,
   frameOverflowRule,
   containerOverflowRule,
@@ -104,41 +109,63 @@ export function runSyncRules(
   return findings
 }
 
-/** Deterministic fixes for a set of findings, routed per rule. Core layout
- *  findings (overlap/frame/container) merge into ONE autofixLayout call.
- *  Rules without an autofix contribute nothing — their findings ride to the
- *  model. */
+/** Deterministic fixes for a set of findings, routed per rule in REGISTRY
+ *  order. Core layout findings (overlap/frame/container) merge into ONE
+ *  autofixLayout call at the core rules' position (last — they re-judge
+ *  whatever earlier fixes proposed). Rules without an autofix contribute
+ *  nothing — their findings ride to the model.
+ *
+ *  One node, one move per pass: every emitted setLayout compounds dx/dy
+ *  against the SAME pre-pass layout snapshot, so a second call for a node
+ *  would clobber the first, not stack on it. Later rules' calls for an
+ *  already-claimed node are dropped; the next lint pass re-judges from
+ *  fresh measurements. */
 export function guardAutofix(
   findings: GuardFinding[],
   ctx: RuleContext,
   config: GuardConfig
 ): CommandCall[] {
   const calls: CommandCall[] = []
-
-  const core = findings.filter((f) => CORE_LAYOUT_RULE_IDS.has(f.rule))
-  if (core.length) {
-    calls.push(
-      ...autofixLayout(
-        ctx.scene,
-        ctx.measure,
-        core.map(
-          (f): LintFinding => ({
-            kind: f.kind as LintFinding["kind"],
-            ids: f.ids,
-            message: f.message,
-          })
-        )
-      )
-    )
+  const claimed = new Set<string>()
+  const push = (ruleCalls: CommandCall[]) => {
+    for (const call of ruleCalls) {
+      const id = call.args?.id
+      if (typeof id === "string") {
+        if (claimed.has(id)) continue
+        claimed.add(id)
+      }
+      calls.push(call)
+    }
   }
 
+  let coreDone = false
   for (const rule of DESIGN_RULES) {
-    if (CORE_LAYOUT_RULE_IDS.has(rule.id) || !rule.autofix) continue
-    if (!isRuleEnabled(rule, config)) continue
+    if (CORE_LAYOUT_RULE_IDS.has(rule.id)) {
+      if (coreDone) continue
+      coreDone = true
+      const core = findings.filter((f) => CORE_LAYOUT_RULE_IDS.has(f.rule))
+      if (core.length) {
+        push(
+          autofixLayout(
+            ctx.scene,
+            ctx.measure,
+            core.map(
+              (f): LintFinding => ({
+                kind: f.kind as LintFinding["kind"],
+                ids: f.ids,
+                message: f.message,
+              })
+            )
+          )
+        )
+      }
+      continue
+    }
+    if (!rule.autofix || !isRuleEnabled(rule, config)) continue
     const own = findings.filter((f) => f.rule === rule.id)
     if (!own.length) continue
-    calls.push(
-      ...rule.autofix(own, {
+    push(
+      rule.autofix(own, {
         ...ctx,
         thresholds: mergedThresholds(rule, config),
       })

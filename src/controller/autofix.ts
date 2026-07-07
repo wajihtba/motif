@@ -262,46 +262,55 @@ class FixContext {
 
   /** Deltas → element.setLayout calls (normalized against each parent). */
   emit(): CommandCall[] {
-    const calls: CommandCall[] = []
-    for (const [id, d] of this.deltas) {
-      if (Math.abs(d.dx) < 0.5 && Math.abs(d.dy) < 0.5) continue
-      const n = findNode(this.scene, id)
-      if (!n || !isTranslatable(n)) continue
-      const pb = this.parentBox(id)
-      const layout = n.layout as Extract<
-        SceneNode["layout"],
-        { dx?: number; dy?: number }
-      >
-      calls.push({
-        command: "element.setLayout",
-        args: {
-          id,
-          layout: {
-            ...layout,
-            dx: round3((layout.dx ?? 0) + d.dx / pb.w),
-            dy: round3((layout.dy ?? 0) + d.dy / pb.h),
-          },
-        },
-      })
-    }
-    return calls
+    return emitTranslations(this.scene, this.measure, this.deltas)
   }
+}
 
-  /** Parent container box (px) for converting px deltas to normalized offsets
-   *  — same resolution as the drag write-back (engine/interaction.ts). */
-  private parentBox(id: string): Box {
-    const parent = findParent(this.scene, id)
-    if (parent && parent.id !== this.scene.root.id) {
-      const pb = this.measure(parent.id)
+/** Px deltas → element.setLayout translation calls (normalized against each
+ *  parent's box — same resolution as the drag write-back in
+ *  engine/interaction.ts). The shared emitter for every guard fixer: only
+ *  dx/dy move, so anchors, sizes and stack configs survive. */
+export function emitTranslations(
+  scene: Scene,
+  measure: (id: string) => Box | null,
+  deltas: Map<string, { dx: number; dy: number }>
+): CommandCall[] {
+  const parentBox = (id: string): Box => {
+    const parent = findParent(scene, id)
+    if (parent && parent.id !== scene.root.id) {
+      const pb = measure(parent.id)
       if (pb && pb.w > 0 && pb.h > 0) return pb
     }
-    return { x: 0, y: 0, w: this.scene.baseWidth, h: this.scene.baseHeight }
+    return { x: 0, y: 0, w: scene.baseWidth, h: scene.baseHeight }
   }
+  const calls: CommandCall[] = []
+  for (const [id, d] of deltas) {
+    if (Math.abs(d.dx) < 0.5 && Math.abs(d.dy) < 0.5) continue
+    const n = findNode(scene, id)
+    if (!n || !isTranslatable(n)) continue
+    const pb = parentBox(id)
+    const layout = n.layout as Extract<
+      SceneNode["layout"],
+      { dx?: number; dy?: number }
+    >
+    calls.push({
+      command: "element.setLayout",
+      args: {
+        id,
+        layout: {
+          ...layout,
+          dx: round3((layout.dx ?? 0) + d.dx / pb.w),
+          dy: round3((layout.dy ?? 0) + d.dy / pb.h),
+        },
+      },
+    })
+  }
+  return calls
 }
 
 /** Only anchored boxes can be translated: flow children are placed by their
  *  parent stack; an unanchored stack ignores dx/dy entirely. */
-function isTranslatable(n: SceneNode): boolean {
+export function isTranslatable(n: SceneNode): boolean {
   if (n.locked) return false
   if (n.layout.mode === "absolute") return true
   return n.layout.mode === "stack" && n.layout.anchor != null
