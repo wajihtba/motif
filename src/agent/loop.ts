@@ -20,6 +20,7 @@ import { brandDigest } from "../brand/digest"
 import { exportImage } from "../engine/export"
 import { runGuardPass } from "../controller/guard/run"
 import { getGuardConfig } from "../persistence/settings"
+import { buildJudgeMessage, judgeCriteria } from "./judge"
 import { contextBlock } from "./prompts"
 import { parsePartialJson } from "./partial-json"
 
@@ -53,6 +54,9 @@ export interface AgentSessionDeps {
   /** Guard config source — injectable for tests; defaults to the persisted
    *  app settings (src/persistence/settings.ts). */
   guardConfig?: () => GuardConfig
+  /** Render-for-review source (base64 JPEG) — injectable for tests; the
+   *  default exports the scene and downscales it (reviewJpeg). */
+  reviewImage?: () => Promise<string>
 }
 
 export class AgentSession {
@@ -68,6 +72,8 @@ export class AgentSession {
   /** Finding keys (`rule:ids`) already given their one deterministic layout
    *  fix this send() — a fix that didn't stick rides to the model instead. */
   private guardFixAttempted = new Set<string>()
+  /** The one vision-review round per send() has been spent. */
+  private judgeAttempted = false
 
   constructor(private deps: AgentSessionDeps) {}
 
@@ -87,6 +93,7 @@ export class AgentSession {
     this.repairAttempted = false
     this.contrastFixAttempted.clear()
     this.guardFixAttempted.clear()
+    this.judgeAttempted = false
     chat.addText("user", userText)
     chat.apiMessages.push({
       role: "user",
@@ -313,12 +320,18 @@ export class AgentSession {
   /** End-of-turn guard: when the turn changed the scene and unresolved
    *  `layout:` findings remain, inject one synthetic user message asking the
    *  model to fix or mark them, and continue the round loop. Once per send —
-   *  a model that insists twice keeps its layout (flexibility over nagging). */
+   *  a model that insists twice keeps its layout (flexibility over nagging).
+   *  After the deterministic channel is done (clean, or its repair round
+   *  spent), the optional vision-review round runs — also once per send. */
   private async maybeRequestRepair(): Promise<boolean> {
-    if (!this.sceneChanged || this.repairAttempted) return false
+    if (!this.sceneChanged) return false
+    const config = (this.deps.guardConfig ?? getGuardConfig)()
+    const judgePending = config.visionJudge.enabled && !this.judgeAttempted
+    // Both once-per-send rounds spent → nothing left to ask, skip the
+    // measure pass entirely (the pre-judge behavior, preserved).
+    if (this.repairAttempted && !judgePending) return false
     const seqBefore = this.deps.ctrl.history.lastSeq
     const lines = await this.lintAfterSettle()
-    if (!lines.length) return false
     // An abort mid-measure must not leave a stale synthetic message behind.
     if (this.abortController?.signal.aborted) return false
     // Don't fight the user: if they edited while we were measuring, the
@@ -327,19 +340,56 @@ export class AgentSession {
       .since(seqBefore)
       .some((e) => e.source === "user")
     if (userEdited) return false
-    this.repairAttempted = true
-    this.deps.chat.apiMessages.push({
-      role: "user",
-      content: [
-        {
-          type: "text",
-          text: `(automatic design check) unresolved warnings:\n${lines.join(
-            "\n"
-          )}\nFix them now with motif_edit — or mark what is intentional (allowOverlap: true for layering, allowLowContrast: true for decorative low-contrast text).`,
-        },
-      ],
-    })
-    return true
+    if (lines.length && !this.repairAttempted) {
+      this.repairAttempted = true
+      this.deps.chat.apiMessages.push({
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: `(automatic design check) unresolved warnings:\n${lines.join(
+              "\n"
+            )}\nFix them now with motif_edit — or mark what is intentional (allowOverlap: true for layering, allowLowContrast: true for decorative low-contrast text).`,
+          },
+        ],
+      })
+      return true
+    }
+    return this.maybeRequestReview(seqBefore, config)
+  }
+
+  /** The vision-review round (agent/judge.ts): export the settled render,
+   *  hand it back to the model with the critique brief. Config-gated, once
+   *  per send, and it stands down on abort or user edits like the repair. */
+  private async maybeRequestReview(
+    seqBefore: number,
+    config: GuardConfig
+  ): Promise<boolean> {
+    if (!config.visionJudge.enabled || this.judgeAttempted) return false
+    this.judgeAttempted = true
+    try {
+      const jpeg = await (this.deps.reviewImage ?? (() => this.defaultReviewImage()))()
+      if (this.abortController?.signal.aborted) return false
+      const userEdited = this.deps.ctrl.history
+        .since(seqBefore)
+        .some((e) => e.source === "user")
+      if (userEdited) return false
+      this.deps.chat.apiMessages.push({
+        role: "user",
+        content: buildJudgeMessage(jpeg, judgeCriteria(config)),
+      })
+      return true
+    } catch {
+      return false // a failed export must never break the turn
+    }
+  }
+
+  private async defaultReviewImage(): Promise<string> {
+    const blob = await exportImage(
+      this.deps.ctrl.store.state.document.scene,
+      "jpeg"
+    )
+    return reviewJpeg(blob)
   }
 
   /** Measure-based design-guard pass, run after the applied scene settles

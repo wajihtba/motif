@@ -48,6 +48,15 @@ measure-based **layout lint** with a same-turn feedback loop:
    image returns to the model as an image tool_result block for visual
    verification — opt-in, prompt tells the model to use it sparingly.
 
+## Superseded (see 06-design-guard.md)
+
+The lint/auto-fix core described above now lives behind the **design-guard
+rule registry** (`src/controller/guard/`): per-rule enable/thresholds,
+deterministic layout auto-fix wired INTO the agent loop (not just the
+editor toggle), four new rules (edge-margin, text-clip, spacing-rhythm,
+alignment), and an opt-in vision-review round. `lintLayout`/`autofixLayout`
+remain as the shared primitives the registry composes.
+
 ## Still deferred
 
 - **Snap hysteresis / spacing-equalization guides** (Figma's "equal gap"
@@ -55,5 +64,5 @@ measure-based **layout lint** with a same-turn feedback loop:
   feel wrong in practice.
 - **Resize snapping** — drag-only for now.
 - **Automated LLM-judge scoring** of exported renders in the eval harness
-  (scripts/eval-live.ts) — the review loop above gives the model eyes; a
-  scored judge belongs with the eval lane.
+  (scripts/eval-live.ts) — the in-session review round (06) gives the model
+  eyes; a scored judge belongs with the eval lane.

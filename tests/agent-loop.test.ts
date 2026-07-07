@@ -395,6 +395,111 @@ describe("agent loop (recorded streams)", () => {
   })
 })
 
+describe("agent loop — vision review round", () => {
+  const generateRound = () =>
+    toolUseRound("motif_generate", {
+      root: { children: [{ id: "a", role: "headline", html: "Hi" }] },
+    })
+
+  it("enabled: exactly one review round with the render attached", async () => {
+    const ctrl = new EditorController()
+    const chat = new ChatStore()
+    let exports = 0
+    const session = new AgentSession({
+      ctrl,
+      chat,
+      transport: scriptedTransport([
+        generateRound(),
+        textRound("Done."), // clean end_turn → review round fires
+        textRound("The design passes."), // model judges, ends again
+      ]),
+      lint: () => Promise.resolve([]),
+      guardConfig: () => ({
+        ...DEFAULT_GUARD_CONFIG,
+        visionJudge: { enabled: true },
+      }),
+      reviewImage: () => {
+        exports++
+        return Promise.resolve("dGlueWpwZWc=")
+      },
+    })
+    await session.send("make something")
+
+    expect(exports).toBe(1)
+    const reviews = chat.apiMessages.filter(
+      (m) =>
+        m.role === "user" &&
+        JSON.stringify(m.content).includes("(automatic design review)")
+    )
+    expect(reviews).toHaveLength(1)
+    const blocks = reviews[0].content
+    expect(blocks[0].type).toBe("image")
+    expect(
+      (blocks[0] as { source: { data: string } }).source.data
+    ).toBe("dGlueWpwZWc=")
+    expect(JSON.stringify(blocks[1])).toContain("hierarchy")
+  })
+
+  it("disabled (default): no review round, no export", async () => {
+    const ctrl = new EditorController()
+    const chat = new ChatStore()
+    let exports = 0
+    const session = new AgentSession({
+      ctrl,
+      chat,
+      transport: scriptedTransport([generateRound(), textRound("Done.")]),
+      lint: () => Promise.resolve([]),
+      reviewImage: () => {
+        exports++
+        return Promise.resolve("x")
+      },
+    })
+    await session.send("make something")
+    expect(exports).toBe(0)
+    expect(
+      chat.apiMessages.some((m) =>
+        JSON.stringify(m.content).includes("(automatic design review)")
+      )
+    ).toBe(false)
+  })
+
+  it("runs after the repair round when warnings persisted", async () => {
+    const ctrl = new EditorController()
+    const chat = new ChatStore()
+    const lintResults = [
+      ["layout: #a overlaps #b by 100×40px"], // generate
+      ["layout: #a overlaps #b by 100×40px"], // end-of-turn → repair round
+      ["layout: #a overlaps #b by 100×40px"], // model refused → review still runs
+    ]
+    let lintCalls = 0
+    const session = new AgentSession({
+      ctrl,
+      chat,
+      transport: scriptedTransport([
+        generateRound(),
+        textRound("Done."), // ends with warnings → repair
+        textRound("Keeping the layout."), // refuses → review round
+        textRound("Passes."),
+      ]),
+      lint: () => Promise.resolve(lintResults[lintCalls++] ?? []),
+      guardConfig: () => ({
+        ...DEFAULT_GUARD_CONFIG,
+        visionJudge: { enabled: true },
+      }),
+      reviewImage: () => Promise.resolve("aW1n"),
+    })
+    await session.send("make something")
+
+    const kinds = chat.apiMessages
+      .filter((m) => m.role === "user")
+      .map((m) => JSON.stringify(m.content))
+    expect(kinds.some((c) => c.includes("(automatic design check)"))).toBe(true)
+    expect(
+      kinds.filter((c) => c.includes("(automatic design review)"))
+    ).toHaveLength(1)
+  })
+})
+
 describe("agent loop — design-guard pass (real backend measure path)", () => {
   // jsdom has no FontFaceSet — lintAfterSettle races document.fonts.ready,
   // so give it a resolved stand-in (the DOM lib types hide the gap, hence
