@@ -31,12 +31,13 @@ const text = (id: string, extra: Partial<SceneNode> = {}) =>
 
 /** Context with the rule's merged default thresholds baked in. */
 function ctxFor(
-  ruleId: "spacing-rhythm" | "alignment" | "edge-margin",
+  ruleId: "spacing-rhythm" | "alignment" | "edge-margin" | "text-clip",
   children: SceneNode[],
-  boxes: Record<string, Box | undefined>
+  boxes: Record<string, Box | undefined>,
+  extras: { probeScroll?: RuleContext["probeScroll"] } = {}
 ): { ctx: RuleContext; lint: () => GuardFinding[]; fix: (f: GuardFinding[]) => CommandCall[] } {
   const rule = ruleById(ruleId)!
-  const base = buildRuleContext(sceneWith(children), measurer(boxes))
+  const base = buildRuleContext(sceneWith(children), measurer(boxes), extras)
   const ctx = {
     ...base,
     thresholds: mergedThresholds(rule, DEFAULT_GUARD_CONFIG),
@@ -240,6 +241,110 @@ describe("edge-margin", () => {
     expect(lint().filter((f) => f.ids.includes("label"))).toHaveLength(0)
   })
 
+})
+
+describe("text-clip", () => {
+  it("tier 1: flags text escaping an overflow-hidden ancestor", () => {
+    const frame = node({
+      id: "mask",
+      role: "group",
+      css: { overflow: "hidden" },
+      children: [text("caption")],
+    })
+    const { lint } = ctxFor("text-clip", [frame], {
+      mask: { x: 100, y: 100, w: 400, h: 100 },
+      caption: { x: 120, y: 120, w: 360, h: 120 }, // 40px past mask's bottom
+    })
+    const findings = lint()
+    expect(findings).toHaveLength(1)
+    expect(findings[0].ids).toEqual(["caption", "mask"])
+    expect(findings[0].message).toContain("clipped 40px")
+    expect(findings[0].data).toBeUndefined() // design decision — no autofix
+  })
+
+  it("tier 1: no finding without overflow clipping on the ancestor", () => {
+    const frame = node({
+      id: "wrap",
+      role: "group",
+      children: [text("caption")],
+    })
+    const { lint } = ctxFor("text-clip", [frame], {
+      wrap: { x: 100, y: 100, w: 400, h: 100 },
+      caption: { x: 120, y: 120, w: 360, h: 120 },
+    })
+    expect(lint()).toHaveLength(0)
+  })
+
+  it("tier 2: flags a fixed-height leaf whose scrollH exceeds clientH and releases the height", () => {
+    const clipped = text("blurb", {
+      layout: {
+        mode: "absolute",
+        anchor: "top-left",
+        dx: 0.1,
+        dy: 0.1,
+        width: 0.4,
+        height: 0.1, // fixed → eligible for the auto-release
+      },
+    })
+    const { lint, fix } = ctxFor("text-clip", [clipped], {
+      blurb: { x: 108, y: 108, w: 432, h: 108 },
+    }, {
+      probeScroll: (id) =>
+        id === "blurb"
+          ? { scrollW: 432, scrollH: 160, clientW: 432, clientH: 108 }
+          : null,
+    })
+    const findings = lint()
+    expect(findings).toHaveLength(1)
+    expect(findings[0].message).toContain("needs 160px")
+    const calls = fix(findings)
+    expect(calls).toHaveLength(1)
+    const args = calls[0].args as { id: string; layout: { height: unknown } }
+    expect(args.id).toBe("blurb")
+    expect(args.layout.height).toBe("auto")
+  })
+
+  it("tier 2: css-pinned heights are flagged but never auto-released", () => {
+    const clipped = text("blurb", {
+      css: { height: "108px" },
+      layout: {
+        mode: "absolute",
+        anchor: "top-left",
+        dx: 0.1,
+        dy: 0.1,
+        width: 0.4,
+        height: "auto",
+      },
+    })
+    const { lint, fix } = ctxFor("text-clip", [clipped], {
+      blurb: { x: 108, y: 108, w: 432, h: 108 },
+    }, {
+      probeScroll: () => ({ scrollW: 432, scrollH: 160, clientW: 432, clientH: 108 }),
+    })
+    const findings = lint()
+    expect(findings).toHaveLength(1)
+    expect(fix(findings)).toHaveLength(0)
+  })
+
+  it("tier 2: silent without probeScroll (headless degrade)", () => {
+    const clipped = text("blurb", {
+      layout: {
+        mode: "absolute",
+        anchor: "top-left",
+        dx: 0.1,
+        dy: 0.1,
+        width: 0.4,
+        height: 0.1,
+      },
+    })
+    const { lint } = ctxFor("text-clip", [clipped], {
+      blurb: { x: 108, y: 108, w: 432, h: 108 },
+    })
+    expect(lint()).toHaveLength(0)
+  })
+})
+
+describe("edge-margin (pinch)", () => {
   it("pinched from both sides: flagged but not auto-fixed", () => {
     const { lint, fix } = ctxFor("edge-margin", [text("wide")], {
       // 30px from left AND right (1080 - 30*2 = 1020 wide), but under the

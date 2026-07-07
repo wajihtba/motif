@@ -33,12 +33,13 @@ import {
 } from "./rules/core"
 import { contrastRule } from "./rules/contrast"
 import { edgeMarginRule } from "./rules/edge-margin"
+import { textClipRule } from "./rules/text-clip"
 import { spacingRhythmRule } from "./rules/spacing-rhythm"
 import { alignmentRule } from "./rules/alignment"
 
 export const DESIGN_RULES: DesignRule[] = [
   edgeMarginRule,
-  // text-clip lands here (phase 4 of the rollout).
+  textClipRule,
   spacingRhythmRule,
   alignmentRule,
   overlapRule,

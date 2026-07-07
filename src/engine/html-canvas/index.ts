@@ -179,6 +179,24 @@ export class HtmlCanvasBackend implements RendererBackend {
     }
   }
 
+  /** Scroll vs client extents off the measurement copy (text-clip lint).
+   *  The host lays out at scene size, so these are scene px like measure(). */
+  probeScroll(id: string): {
+    scrollW: number
+    scrollH: number
+    clientW: number
+    clientH: number
+  } | null {
+    const el = this.measurement.elOf(id)
+    if (!el) return null
+    return {
+      scrollW: el.scrollWidth,
+      scrollH: el.scrollHeight,
+      clientW: el.clientWidth,
+      clientH: el.clientHeight,
+    }
+  }
+
   /** Recompute the effect plan + animations + loop continuity. */
   private replan(): void {
     if (!this.scene) return

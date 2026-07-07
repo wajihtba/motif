@@ -116,6 +116,15 @@ export interface RendererBackend {
   /** Resolved computed style of a node (contrast lint). Optional — a backend
    *  without a live DOM copy may not support it. */
   probeStyle?: (id: string) => ProbedStyle | null
+  /** Scroll vs client extents of a node's live copy (text-clip lint —
+   *  scrollH > clientH means content the box cannot show). Optional, same
+   *  caveat as probeStyle. */
+  probeScroll?: (id: string) => {
+    scrollW: number
+    scrollH: number
+    clientW: number
+    clientH: number
+  } | null
   /** Resolves when images are loaded, paint records settled, loop parked. */
   whenIdle: () => Promise<void>
   dispose: () => void
